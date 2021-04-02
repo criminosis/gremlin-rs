@@ -409,36 +409,6 @@ impl std::convert::TryFrom<GValue> for bool {
     }
 }
 
-impl std::convert::TryFrom<GValue> for f32 {
-    type Error = crate::GremlinError;
-
-    fn try_from(value: GValue) -> GremlinResult<Self> {
-        match value {
-            GValue::Float(x) => Ok(x),
-            GValue::List(s) => from_list(s),
-            _ => Err(GremlinError::Cast(format!(
-                "Cannot cast {:?} to f32",
-                value
-            ))),
-        }
-    }
-}
-
-impl std::convert::TryFrom<GValue> for f64 {
-    type Error = crate::GremlinError;
-
-    fn try_from(value: GValue) -> GremlinResult<Self> {
-        match value {
-            GValue::Double(x) => Ok(x),
-            GValue::List(s) => from_list(s),
-            _ => Err(GremlinError::Cast(format!(
-                "Cannot cast {:?} to f64",
-                value
-            ))),
-        }
-    }
-}
-
 fn from_list<T>(glist: List) -> GremlinResult<T>
 where
     T: std::convert::TryFrom<GValue, Error = GremlinError>,
