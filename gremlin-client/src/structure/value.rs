@@ -488,6 +488,7 @@ macro_rules! impl_try_from_set {
                 match value {
                     GValue::List(s) => for_list_to_set(&s),
                     GValue::Set(s) => for_set(&s),
+                    GValue::Null => Ok(HashSet::new()),
                     _ => Err(GremlinError::Cast(format!(
                         "Cannot cast {:?} to HashSet",
                         value
@@ -503,6 +504,7 @@ macro_rules! impl_try_from_set {
                 match value {
                     GValue::List(s) => for_list_to_set(&s),
                     GValue::Set(s) => for_set(&s),
+                    GValue::Null => Ok(HashSet::new()),
                     _ => Err(GremlinError::Cast(format!(
                         "Cannot cast {:?} to HashSet",
                         value
@@ -518,6 +520,7 @@ macro_rules! impl_try_from_set {
                 match value {
                     GValue::List(s) => for_list_to_set(s),
                     GValue::Set(s) => for_set(s),
+                    GValue::Null => Ok(HashSet::new()),
                     _ => Err(GremlinError::Cast(format!(
                         "Cannot cast {:?} to HashSet",
                         value
@@ -546,6 +549,7 @@ macro_rules! impl_try_from_list {
             fn try_from(value: GValue) -> GremlinResult<Self> {
                 match value {
                     GValue::List(s) => for_list(&s),
+                    GValue::Null => Ok(Vec::new()),
                     _ => Err(GremlinError::Cast(format!(
                         "Cannot cast {:?} to Vec",
                         value
@@ -560,6 +564,7 @@ macro_rules! impl_try_from_list {
             fn try_from(value: &GValue) -> GremlinResult<Self> {
                 match value {
                     GValue::List(s) => for_list(s),
+                    GValue::Null => Ok(Vec::new()),
                     _ => Err(GremlinError::Cast(format!(
                         "Cannot cast {:?} to Vec",
                         value
