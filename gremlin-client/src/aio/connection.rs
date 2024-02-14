@@ -267,7 +267,10 @@ fn receiver_loop(
                 }
                 Some(Ok(item)) => match item {
                     Message::Binary(data) => {
-                        let response: Response = serde_json::from_slice(&data).expect(&format!("Failed deserialization of {}", String::from_utf8(data)));
+                        let response: Response = serde_json::from_slice(&data).expect(&format!(
+                            "Failed deserialization of {}",
+                            String::from_utf8(data)
+                        ));
                         let mut guard = requests.lock().await;
                         if response.status.code != 206 {
                             let item = guard.remove(&response.request_id);
