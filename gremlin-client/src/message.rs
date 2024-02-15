@@ -1,4 +1,5 @@
 use serde_derive::{Deserialize, Serialize};
+use serde::Deserializer;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -71,7 +72,7 @@ pub struct ReponseStatus {
 
 fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
-    T: Default + Deserialize<'de>,
+    T: Default + serde::Deserialize<'de>,
     D: Deserializer<'de>,
 {
     let opt = Option::deserialize(deserializer)?;
