@@ -191,12 +191,12 @@ impl GremlinClient {
                     }
                     None => Err(GremlinError::Request((
                         response.status.code,
-                        response.status.message,
+                        response.status.message.unwrap_or_default(),
                     ))),
                 },
                 _ => Err(GremlinError::Request((
                     response.status.code,
-                    response.status.message,
+                    response.status.message.unwrap_or_default(),
                 ))),
             }?;
 
