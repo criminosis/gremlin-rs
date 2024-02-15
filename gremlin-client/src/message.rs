@@ -64,8 +64,18 @@ pub struct ResponseResult {
 #[derive(Debug, Deserialize)]
 pub struct ReponseStatus {
     pub code: i16,
-    #[serde(default)]
+    //https://github.com/serde-rs/serde/issues/1098#issuecomment-760711617
+    #[serde(deserialize_with = "deserialize_null_default")]
     pub message: String,
+}
+
+fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    T: Default + Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    let opt = Option::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
 }
 
 pub fn message_with_args_v2<T>(op: String, processor: String, args: T) -> Message<T> {
