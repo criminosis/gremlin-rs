@@ -64,6 +64,7 @@ pub struct ResponseResult {
 #[derive(Debug, Deserialize)]
 pub struct ReponseStatus {
     pub code: i16,
+    #[serde(default)]
     pub message: String,
 }
 
