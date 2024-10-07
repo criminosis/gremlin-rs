@@ -49,10 +49,7 @@ impl ManageConnection for GremlinConnectionManager {
 
         let msg = serde_json::to_string(&message).map_err(GremlinError::from)?;
 
-        let content_type = match self.options.serializer {
-            Protocol::GraphSONV2 => "application/vnd.gremlin-v2.0+json",
-            Protocol::GraphSONV3 => "application/vnd.gremlin-v3.0+json",
-        };
+        let content_type = self.options.serializer.content_type();
         let payload = String::from("") + content_type + &msg;
 
         let mut binary = payload.into_bytes();
