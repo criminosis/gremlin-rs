@@ -11,7 +11,7 @@ pub fn assert_map_property(element_map: &Map, expected_key: &str, expected_value
 
 #[allow(dead_code)]
 pub mod io {
-    use gremlin_client::{ConnectionOptions, Edge, GraphSON, GremlinClient, GremlinResult, Vertex};
+    use gremlin_client::{ConnectionOptions, Edge, Protocol, GremlinClient, GremlinResult, Vertex};
 
     pub fn connect() -> GremlinResult<GremlinClient> {
         GremlinClient::connect(("localhost", 8182))
@@ -21,10 +21,10 @@ pub mod io {
         GremlinClient::connect(("localhost", 8184))
     }
 
-    pub fn connect_serializer(serializer: GraphSON) -> GremlinResult<GremlinClient> {
+    pub fn connect_serializer(serializer: Protocol) -> GremlinResult<GremlinClient> {
         let port = match serializer {
-            GraphSON::V2 => 8182,
-            GraphSON::V3 => 8182,
+            Protocol::GraphSONV2 => 8182,
+            Protocol::GraphSONV3 => 8182,
         };
         GremlinClient::connect(
             ConnectionOptions::builder()
@@ -44,7 +44,7 @@ pub mod io {
         connect_janusgraph_client().expect("It should connect")
     }
 
-    pub fn expect_client_serializer(serializer: GraphSON) -> GremlinClient {
+    pub fn expect_client_serializer(serializer: Protocol) -> GremlinClient {
         connect_serializer(serializer).expect("It should connect")
     }
 
@@ -54,7 +54,7 @@ pub mod io {
         client
     }
 
-    pub fn graph_serializer(serializer: GraphSON) -> GremlinClient {
+    pub fn graph_serializer(serializer: Protocol) -> GremlinClient {
         let client = expect_client_serializer(serializer);
 
         client
@@ -112,7 +112,7 @@ pub mod io {
 pub mod aio {
     use gremlin_client::aio::GremlinClient;
 
-    use gremlin_client::{ConnectionOptions, Edge, GraphSON, GremlinResult, Vertex};
+    use gremlin_client::{ConnectionOptions, Edge, Protocol, GremlinResult, Vertex};
 
     #[cfg(feature = "async-std-runtime")]
     use async_std::prelude::*;
@@ -126,10 +126,10 @@ pub mod aio {
             .expect("It should connect")
     }
 
-    pub async fn connect_serializer(serializer: GraphSON) -> GremlinClient {
+    pub async fn connect_serializer(serializer: Protocol) -> GremlinClient {
         let port = match serializer {
-            GraphSON::V2 => 8182,
-            GraphSON::V3 => 8182,
+            Protocol::GraphSONV2 => 8182,
+            Protocol::GraphSONV3 => 8182,
         };
         GremlinClient::connect(
             ConnectionOptions::builder()

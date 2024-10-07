@@ -4,7 +4,7 @@ use crate::aio::connection::Conn;
 use crate::connection::ConnectionOptions;
 use crate::error::GremlinError;
 use crate::message::{message_with_args, message_with_args_and_uuid, message_with_args_v2};
-use crate::{GValue, GraphSON};
+use crate::{GValue, Protocol};
 use async_trait::async_trait;
 use base64::encode;
 use std::collections::HashMap;
@@ -43,8 +43,8 @@ impl Manager for GremlinConnectionManager {
         let args = self.options.serializer.write(&GValue::from(args))?;
 
         let message = match self.options.serializer {
-            GraphSON::V2 => message_with_args_v2(String::from("eval"), String::default(), args),
-            GraphSON::V3 => message_with_args(String::from("eval"), String::default(), args),
+            Protocol::GraphSONV2 => message_with_args_v2(String::from("eval"), String::default(), args),
+            Protocol::GraphSONV3 => message_with_args(String::from("eval"), String::default(), args),
         };
 
         let id = message.id().clone();

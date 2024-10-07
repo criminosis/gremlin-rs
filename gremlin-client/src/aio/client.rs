@@ -1,6 +1,6 @@
 use crate::aio::pool::GremlinConnectionManager;
 use crate::aio::GResultSet;
-use crate::io::GraphSON;
+use crate::io::Protocol;
 use crate::message::{
     message_with_args, message_with_args_and_uuid, message_with_args_v2, Message,
 };
@@ -26,8 +26,8 @@ impl SessionedClient {
             let processor = "session".to_string();
 
             let message = match self.options.serializer {
-                GraphSON::V2 => message_with_args_v2(String::from("close"), processor, args),
-                GraphSON::V3 => message_with_args(String::from("close"), processor, args),
+                Protocol::GraphSONV2 => message_with_args_v2(String::from("close"), processor, args),
+                Protocol::GraphSONV3 => message_with_args(String::from("close"), processor, args),
             };
 
             let conn = self.pool.get().await?;
@@ -140,8 +140,8 @@ impl GremlinClient {
         };
 
         let message = match self.options.serializer {
-            GraphSON::V2 => message_with_args_v2(String::from("eval"), processor, args),
-            GraphSON::V3 => message_with_args(String::from("eval"), processor, args),
+            Protocol::GraphSONV2 => message_with_args_v2(String::from("eval"), processor, args),
+            Protocol::GraphSONV3 => message_with_args(String::from("eval"), processor, args),
         };
 
         let conn = self.pool.get().await?;

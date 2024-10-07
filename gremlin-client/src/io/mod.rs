@@ -2,6 +2,7 @@
 mod macros;
 mod serializer_v2;
 mod serializer_v3;
+mod graph_binary_v1;
 
 use crate::conversion::ToGValue;
 use crate::process::traversal::{Order, Scope};
@@ -12,19 +13,19 @@ use std::string::ToString;
 use crate::{GremlinError, GremlinResult};
 
 #[derive(Debug, Clone)]
-pub enum GraphSON {
-    V2,
-    V3,
+pub enum Protocol {
+    GraphSONV2,
+    GraphSONV3,
 }
 
-impl GraphSON {
+impl Protocol {
     pub fn read(&self, value: &Value) -> GremlinResult<Option<GValue>> {
         if let Value::Null = value {
             return Ok(None);
         }
         match self {
-            GraphSON::V2 => serializer_v2::deserializer_v2(value).map(Some),
-            GraphSON::V3 => serializer_v3::deserializer_v3(value).map(Some),
+            Protocol::GraphSONV2 => serializer_v2::deserializer_v2(value).map(Some),
+            Protocol::GraphSONV3 => serializer_v3::deserializer_v3(value).map(Some),
         }
     }
 
@@ -55,11 +56,11 @@ impl GraphSON {
                 "@type" : "g:Date",
                 "@value" : d.timestamp_millis()
             })),
-            (GraphSON::V2, GValue::List(d)) => {
+            (Protocol::GraphSONV2, GValue::List(d)) => {
                 let elements: GremlinResult<Vec<Value>> = d.iter().map(|e| self.write(e)).collect();
                 Ok(json!(elements?))
             }
-            (GraphSON::V3, GValue::List(d)) => {
+            (Protocol::GraphSONV3, GValue::List(d)) => {
                 let elements: GremlinResult<Vec<Value>> = d.iter().map(|e| self.write(e)).collect();
                 Ok(json!({
                     "@type" : "g:List",
@@ -120,7 +121,7 @@ impl GraphSON {
                     }
                 }))
             }
-            (GraphSON::V2, GValue::Map(map)) => {
+            (Protocol::GraphSONV2, GValue::Map(map)) => {
                 let mut params = Map::new();
 
                 for (k, v) in map.iter() {
@@ -137,7 +138,7 @@ impl GraphSON {
 
                 Ok(json!(params))
             }
-            (GraphSON::V3, GValue::Map(map)) => {
+            (Protocol::GraphSONV3, GValue::Map(map)) => {
                 let mut params = vec![];
 
                 for (k, v) in map.iter() {
@@ -254,8 +255,8 @@ impl GraphSON {
 
     pub fn content_type(&self) -> &str {
         match self {
-            GraphSON::V2 => "application/vnd.gremlin-v2.0+json",
-            GraphSON::V3 => "application/vnd.gremlin-v3.0+json",
+            Protocol::GraphSONV2 => "application/vnd.gremlin-v2.0+json",
+            Protocol::GraphSONV3 => "application/vnd.gremlin-v3.0+json",
         }
     }
 }

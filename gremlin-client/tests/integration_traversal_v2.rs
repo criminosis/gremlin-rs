@@ -2,7 +2,7 @@ use gremlin_client::process::traversal::{traversal, Order, __};
 use gremlin_client::structure::{
     Cardinality, GKey, GValue, List, Map, Pop, TextP, Vertex, VertexProperty, GID, P, T,
 };
-use gremlin_client::{utils, GraphSON};
+use gremlin_client::{utils, Protocol};
 
 mod common;
 
@@ -13,7 +13,7 @@ use common::io::{
 
 #[test]
 fn test_simple_vertex_traversal_v2() {
-    let g = traversal().with_remote(graph_serializer(GraphSON::V2));
+    let g = traversal().with_remote(graph_serializer(Protocol::GraphSONV2));
 
     let results = g.v(()).to_list().unwrap();
 
@@ -22,7 +22,7 @@ fn test_simple_vertex_traversal_v2() {
 
 #[test]
 fn test_simple_vertex_traversal_with_id_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     let vertex = create_vertex(&client, "Traversal");
 
@@ -37,7 +37,7 @@ fn test_simple_vertex_traversal_with_id_v2() {
 
 #[test]
 fn test_simple_vertex_traversal_with_multiple_id_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
     drop_vertices(&client, "test_simple_vertex_traversal").unwrap();
 
     let vertex = create_vertex_with_label(&client, "test_simple_vertex_traversal", "Traversal");
@@ -55,7 +55,7 @@ fn test_simple_vertex_traversal_with_multiple_id_v2() {
 
 #[test]
 fn test_simple_vertex_traversal_with_label_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_simple_vertex_traversal_with_label").unwrap();
 
@@ -80,7 +80,7 @@ fn test_simple_vertex_traversal_with_label_v2() {
 
 #[test]
 fn test_simple_vertex_traversal_with_label_and_has_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_simple_vertex_traversal_with_label_and_has").unwrap();
 
@@ -148,7 +148,7 @@ fn test_simple_vertex_traversal_with_label_and_has_v2() {
 
 #[test]
 fn test_simple_edge_traversal_v2() {
-    let g = traversal().with_remote(graph_serializer(GraphSON::V2));
+    let g = traversal().with_remote(graph_serializer(Protocol::GraphSONV2));
 
     let results = g.e(()).to_list().unwrap();
 
@@ -157,7 +157,7 @@ fn test_simple_edge_traversal_v2() {
 
 #[test]
 fn test_simple_edge_traversal_id_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     let v = create_vertex(&client, "Traversal");
     let v1 = create_vertex(&client, "Traversal");
@@ -175,7 +175,7 @@ fn test_simple_edge_traversal_id_v2() {
 
 #[test]
 fn test_simple_edge_traversal_with_label_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_edges(&client, "test_simple_edge_traversal_with_label").unwrap();
 
@@ -199,7 +199,7 @@ fn test_simple_edge_traversal_with_label_v2() {
 
 #[test]
 fn test_traversal_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_edges(&client, "test_vertex_out_traversal").unwrap();
 
@@ -342,7 +342,7 @@ fn test_traversal_v2() {
 
 #[test]
 fn test_add_v_v2() {
-    let g = traversal().with_remote(graph_serializer(GraphSON::V2));
+    let g = traversal().with_remote(graph_serializer(Protocol::GraphSONV2));
 
     let results = g.add_v("person").to_list().unwrap();
 
@@ -360,7 +360,7 @@ fn test_add_v_v2() {
 
 #[test]
 fn test_add_v_with_properties_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
     let g = traversal().with_remote(client.clone());
 
     let results = g
@@ -405,7 +405,7 @@ fn test_add_v_with_properties_v2() {
 
 #[test]
 fn test_add_v_with_property_many_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_add_v_with_property_many").unwrap();
 
@@ -455,7 +455,7 @@ fn test_add_v_with_property_many_v2() {
 
 #[test]
 fn test_has_many_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_has_many").unwrap();
 
@@ -488,7 +488,7 @@ fn test_has_many_v2() {
 
 #[test]
 fn test_add_e_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
     let g = traversal().with_remote(client.clone());
 
     let v = g
@@ -551,7 +551,7 @@ fn test_add_e_v2() {
 
 #[test]
 fn test_label_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     let vertex = create_vertex(&client, "Traversal");
 
@@ -566,7 +566,7 @@ fn test_label_step_v2() {
 
 #[test]
 fn test_properties_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     let vertex = create_vertex(&client, "Traversal");
 
@@ -591,7 +591,7 @@ fn test_properties_step_v2() {
 
 #[test]
 fn test_property_map_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     let vertex = create_vertex(&client, "Traversal");
 
@@ -638,7 +638,7 @@ fn test_property_map_v2() {
 
 #[test]
 fn test_values_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     let vertex = create_vertex(&client, "Traversal");
 
@@ -667,7 +667,7 @@ fn test_values_v2() {
 
 #[test]
 fn test_value_map_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     let g = traversal().with_remote(client);
 
@@ -718,7 +718,7 @@ fn test_value_map_v2() {
 
 #[test]
 fn test_unwrap_map_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     let g = traversal().with_remote(client);
 
@@ -748,7 +748,7 @@ fn test_unwrap_map_v2() {
 
 #[test]
 fn test_element_map_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     let g = traversal().with_remote(client);
 
@@ -791,7 +791,7 @@ fn test_element_map_v2() {
 
 #[test]
 fn test_count_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     let vertex = create_vertex_with_label(&client, "test_count", "Count");
 
@@ -808,7 +808,7 @@ fn test_count_v2() {
 
 #[test]
 fn test_group_count_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_group_count").unwrap();
 
@@ -871,7 +871,7 @@ fn test_group_count_step_v2() {
 
 #[test]
 fn test_group_by_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_group_by_step").unwrap();
 
@@ -927,7 +927,7 @@ fn test_group_by_step_v2() {
 
 #[test]
 fn test_select_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_select_step").unwrap();
 
@@ -953,7 +953,7 @@ fn test_select_step_v2() {
 
 #[test]
 fn test_fold_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_fold_step").unwrap();
 
@@ -978,7 +978,7 @@ fn test_fold_step_v2() {
 
 #[test]
 fn test_unfold_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_unfold_step").unwrap();
 
@@ -1009,7 +1009,7 @@ fn test_unfold_step_v2() {
 
 #[test]
 fn test_path_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_path_step").unwrap();
 
@@ -1033,7 +1033,7 @@ fn test_path_step_v2() {
 
 #[test]
 fn test_limit_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_limit_step").unwrap();
 
@@ -1054,7 +1054,7 @@ fn test_limit_step_v2() {
 
 #[test]
 fn test_dedup_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_limit_step").unwrap();
 
@@ -1076,7 +1076,7 @@ fn test_dedup_step_v2() {
 
 #[test]
 fn test_numerical_steps_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_numerical_steps").unwrap();
 
@@ -1148,7 +1148,7 @@ fn test_numerical_steps_v2() {
 
 #[test]
 fn test_has_with_p_steps_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_has_with_p_steps").unwrap();
 
@@ -1201,7 +1201,7 @@ fn test_has_with_p_steps_v2() {
 
 #[test]
 fn test_has_with_text_p_step_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_has_with_text_p_step").unwrap();
 
@@ -1268,7 +1268,7 @@ fn test_has_with_text_p_step_v2() {
 
 #[test]
 fn where_step_test_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "where_step_test").unwrap();
 
@@ -1294,7 +1294,7 @@ fn where_step_test_v2() {
 
 #[test]
 fn not_step_test_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "not_step_test").unwrap();
 
@@ -1317,7 +1317,7 @@ fn not_step_test_v2() {
 
 #[test]
 fn order_step_test_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "order_step_test").unwrap();
 
@@ -1361,7 +1361,7 @@ fn order_step_test_v2() {
 
 #[test]
 fn match_step_test_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "match_step_test").unwrap();
 
@@ -1423,7 +1423,7 @@ fn match_step_test_v2() {
 
 #[test]
 fn drop_step_test_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "drop_step_test").unwrap();
 
@@ -1456,7 +1456,7 @@ fn drop_step_test_v2() {
 
 #[test]
 fn or_step_test_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "or_step_test").unwrap();
 
@@ -1497,7 +1497,7 @@ fn or_step_test_v2() {
 
 #[test]
 fn iter_terminator_test_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "iter_terminator_test").unwrap();
 
@@ -1526,7 +1526,7 @@ fn iter_terminator_test_v2() {
 
 #[test]
 fn test_select_pop_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_select_pop").unwrap();
     drop_vertices(&client, "test_select_pop_child").unwrap();
@@ -1615,7 +1615,7 @@ fn test_select_pop_v2() {
 
 #[test]
 fn test_repeat_until_loops_loops_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_repeat_until_loops").unwrap();
     drop_vertices(&client, "test_repeat_until_loops_child").unwrap();
@@ -1656,7 +1656,7 @@ fn test_repeat_until_loops_loops_v2() {
 
 #[test]
 fn test_simple_path_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_simple_path").unwrap();
     drop_vertices(&client, "test_simple_path_child").unwrap();
@@ -1698,7 +1698,7 @@ fn test_simple_path_v2() {
 
 #[test]
 fn test_sample_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_sample").unwrap();
     drop_vertices(&client, "test_sample_child").unwrap();
@@ -1731,7 +1731,7 @@ fn test_sample_v2() {
 
 #[test]
 fn test_local_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_local").unwrap();
     drop_vertices(&client, "test_local_child").unwrap();
@@ -1807,7 +1807,7 @@ fn test_local_v2() {
 
 #[test]
 fn test_property_cardinality_v2() {
-    let client = graph_serializer(GraphSON::V2);
+    let client = graph_serializer(Protocol::GraphSONV2);
 
     drop_vertices(&client, "test_property_cardinality").unwrap();
 
