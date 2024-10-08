@@ -13,19 +13,19 @@ use std::string::ToString;
 use crate::{GremlinError, GremlinResult};
 
 #[derive(Debug, Clone)]
-pub enum Protocol {
+pub enum IoProtocol {
     GraphSONV2,
     GraphSONV3,
 }
 
-impl Protocol {
+impl IoProtocol {
     pub fn read(&self, value: &Value) -> GremlinResult<Option<GValue>> {
         if let Value::Null = value {
             return Ok(None);
         }
         match self {
-            Protocol::GraphSONV2 => serializer_v2::deserializer_v2(value).map(Some),
-            Protocol::GraphSONV3 => serializer_v3::deserializer_v3(value).map(Some),
+            IoProtocol::GraphSONV2 => serializer_v2::deserializer_v2(value).map(Some),
+            IoProtocol::GraphSONV3 => serializer_v3::deserializer_v3(value).map(Some),
         }
     }
 
@@ -56,11 +56,11 @@ impl Protocol {
                 "@type" : "g:Date",
                 "@value" : d.timestamp_millis()
             })),
-            (Protocol::GraphSONV2, GValue::List(d)) => {
+            (IoProtocol::GraphSONV2, GValue::List(d)) => {
                 let elements: GremlinResult<Vec<Value>> = d.iter().map(|e| self.write(e)).collect();
                 Ok(json!(elements?))
             }
-            (Protocol::GraphSONV3, GValue::List(d)) => {
+            (IoProtocol::GraphSONV3, GValue::List(d)) => {
                 let elements: GremlinResult<Vec<Value>> = d.iter().map(|e| self.write(e)).collect();
                 Ok(json!({
                     "@type" : "g:List",
@@ -121,7 +121,7 @@ impl Protocol {
                     }
                 }))
             }
-            (Protocol::GraphSONV2, GValue::Map(map)) => {
+            (IoProtocol::GraphSONV2, GValue::Map(map)) => {
                 let mut params = Map::new();
 
                 for (k, v) in map.iter() {
@@ -138,7 +138,7 @@ impl Protocol {
 
                 Ok(json!(params))
             }
-            (Protocol::GraphSONV3, GValue::Map(map)) => {
+            (IoProtocol::GraphSONV3, GValue::Map(map)) => {
                 let mut params = vec![];
 
                 for (k, v) in map.iter() {
@@ -255,8 +255,8 @@ impl Protocol {
 
     pub fn content_type(&self) -> &str {
         match self {
-            Protocol::GraphSONV2 => "application/vnd.gremlin-v2.0+json",
-            Protocol::GraphSONV3 => "application/vnd.gremlin-v3.0+json",
+            IoProtocol::GraphSONV2 => "application/vnd.gremlin-v2.0+json",
+            IoProtocol::GraphSONV3 => "application/vnd.gremlin-v3.0+json",
         }
     }
 }

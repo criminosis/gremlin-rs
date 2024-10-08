@@ -1,7 +1,7 @@
 mod common;
 
 use gremlin_client::{
-    ConnectionOptions, Protocol, GremlinClient, GremlinError, List, TlsOptions, ToGValue,
+    ConnectionOptions, IoProtocol, GremlinClient, GremlinError, List, TlsOptions, ToGValue,
     TraversalExplanation, TraversalMetrics, VertexProperty,
 };
 use gremlin_client::{Edge, GKey, GValue, Map, Vertex, GID};
@@ -10,14 +10,14 @@ use common::io::{create_edge, create_vertex, expect_client_serializer, graph_ser
 
 #[test]
 fn test_client_connection_ok_v2() {
-    expect_client_serializer(Protocol::GraphSONV2);
+    expect_client_serializer(IoProtocol::GraphSONV2);
 }
 
 #[test]
 fn test_empty_query_v2() {
     assert_eq!(
         0,
-        graph_serializer(Protocol::GraphSONV2)
+        graph_serializer(IoProtocol::GraphSONV2)
             .execute("g.V().hasLabel('NotFound')", &[])
             .expect("It should execute a traversal")
             .count()
@@ -35,7 +35,7 @@ fn test_ok_credentials_v2() {
             .tls_options(TlsOptions {
                 accept_invalid_certs: true,
             })
-            .serializer(Protocol::GraphSONV2)
+            .serializer(IoProtocol::GraphSONV2)
             .build(),
     )
     .expect("Cannot connect");
@@ -55,7 +55,7 @@ fn test_ko_credentials_v2() {
             .tls_options(TlsOptions {
                 accept_invalid_certs: true,
             })
-            .serializer(Protocol::GraphSONV2)
+            .serializer(IoProtocol::GraphSONV2)
             .build(),
     )
     .expect("Cannot connect");
@@ -66,7 +66,7 @@ fn test_ko_credentials_v2() {
 
 #[test]
 fn test_wrong_query_v2() {
-    let error = graph_serializer(Protocol::GraphSONV2)
+    let error = graph_serializer(IoProtocol::GraphSONV2)
         .execute("g.V", &[])
         .expect_err("it should return an error");
 
@@ -81,7 +81,7 @@ fn test_wrong_query_v2() {
 
 #[test]
 fn test_wrong_alias_v2() {
-    let error = graph_serializer(Protocol::GraphSONV2)
+    let error = graph_serializer(IoProtocol::GraphSONV2)
         .alias("foo")
         .execute("g.V()", &[])
         .expect_err("it should return an error");
@@ -98,7 +98,7 @@ fn test_wrong_alias_v2() {
 #[test]
 
 fn test_vertex_query_v2() {
-    let graph = graph_serializer(Protocol::GraphSONV2);
+    let graph = graph_serializer(IoProtocol::GraphSONV2);
     let vertices = graph
         .execute(
             "g.V().hasLabel('person').has('name',name)",
@@ -114,7 +114,7 @@ fn test_vertex_query_v2() {
 }
 #[test]
 fn test_edge_query_v2() {
-    let graph = graph_serializer(Protocol::GraphSONV2);
+    let graph = graph_serializer(IoProtocol::GraphSONV2);
     let edges = graph
         .execute("g.E().hasLabel('knows').limit(1)", &[])
         .expect("it should execute a query")
@@ -128,7 +128,7 @@ fn test_edge_query_v2() {
 
 #[test]
 fn test_vertex_creation_v2() {
-    let graph = graph_serializer(Protocol::GraphSONV2);
+    let graph = graph_serializer(IoProtocol::GraphSONV2);
     let mark = create_vertex(&graph, "mark");
 
     assert_eq!("person", mark.label());
@@ -155,7 +155,7 @@ fn test_inserting_date_with_milisecond_precision() {
     use chrono::DateTime;
     use chrono::Utc;
 
-    let graph = graph_serializer(Protocol::GraphSONV2);
+    let graph = graph_serializer(IoProtocol::GraphSONV2);
 
     let q = r#"g.addV('person').property('dateTime',dateTime).propertyMap()"#;
 
@@ -187,7 +187,7 @@ fn test_inserting_date_with_milisecond_precision() {
 fn test_complex_vertex_creation_with_properties_v2() {
     use chrono::offset::TimeZone;
 
-    let graph = graph_serializer(Protocol::GraphSONV2);
+    let graph = graph_serializer(IoProtocol::GraphSONV2);
 
     let q = r#"
         g.addV('person')
@@ -295,7 +295,7 @@ fn test_complex_vertex_creation_with_properties_v2() {
 
 #[test]
 fn test_edge_creation_v2() {
-    let graph = graph_serializer(Protocol::GraphSONV2);
+    let graph = graph_serializer(IoProtocol::GraphSONV2);
     let mark = create_vertex(&graph, "mark");
     let frank = create_vertex(&graph, "frank");
 
@@ -326,7 +326,7 @@ fn test_edge_creation_v2() {
 
 #[test]
 fn test_profile_v2() {
-    let graph = graph_serializer(Protocol::GraphSONV2);
+    let graph = graph_serializer(IoProtocol::GraphSONV2);
 
     let metrics = graph
         .execute("g.V().limit(1).profile()", &[])
@@ -358,7 +358,7 @@ fn test_profile_v2() {
 
 #[test]
 fn test_explain_v2() {
-    let graph = graph_serializer(Protocol::GraphSONV2);
+    let graph = graph_serializer(IoProtocol::GraphSONV2);
 
     let metrics = graph
         .execute("g.V().limit(1).explain()", &[])
@@ -393,7 +393,7 @@ fn test_explain_v2() {
 #[test]
 
 fn test_group_count_vertex_v2() {
-    let graph = graph_serializer(Protocol::GraphSONV2);
+    let graph = graph_serializer(IoProtocol::GraphSONV2);
     let mark = create_vertex(&graph, "mark");
     let frank = create_vertex(&graph, "frank");
 
@@ -432,7 +432,7 @@ fn test_group_count_vertex_v2() {
 #[test]
 
 fn test_group_count_edge_v2() {
-    let graph = graph_serializer(Protocol::GraphSONV2);
+    let graph = graph_serializer(IoProtocol::GraphSONV2);
     let mark = create_vertex(&graph, "mark");
     let frank = create_vertex(&graph, "frank");
 

@@ -1,6 +1,6 @@
 use crate::{actions::Action, command::Command, context::GremlinContext};
 use futures::FutureExt;
-use gremlin_client::{aio::GremlinClient, ConnectionOptions, Protocol, TlsOptions};
+use gremlin_client::{aio::GremlinClient, ConnectionOptions, IoProtocol, TlsOptions};
 use std::str::FromStr;
 use structopt::StructOpt;
 
@@ -30,11 +30,11 @@ impl FromStr for Serializer {
     }
 }
 
-impl From<Serializer> for Protocol {
+impl From<Serializer> for IoProtocol {
     fn from(serializer: Serializer) -> Self {
         match serializer {
-            Serializer::GraphSONV2 => Protocol::GraphSONV2,
-            Serializer::GraphSONV3 => Protocol::GraphSONV3,
+            Serializer::GraphSONV2 => IoProtocol::GraphSONV2,
+            Serializer::GraphSONV3 => IoProtocol::GraphSONV3,
         }
     }
 }

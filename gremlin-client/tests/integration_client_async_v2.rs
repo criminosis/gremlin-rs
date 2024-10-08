@@ -5,7 +5,7 @@ mod common;
 mod aio {
 
     use gremlin_client::GremlinError;
-    use gremlin_client::{Edge, GValue, Protocol, Map, Vertex};
+    use gremlin_client::{Edge, GValue, IoProtocol, Map, Vertex};
 
     use super::common::aio::{connect_serializer, create_edge, create_vertex};
     #[cfg(feature = "async-std-runtime")]
@@ -17,13 +17,13 @@ mod aio {
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     #[cfg_attr(feature = "tokio-runtime", tokio::test)]
     async fn test_client_connection_ok_v2() {
-        connect_serializer(Protocol::GraphSONV2).await;
+        connect_serializer(IoProtocol::GraphSONV2).await;
     }
 
     #[cfg(feature = "async-std-runtime")]
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     async fn test_empty_query_v2() {
-        let graph = connect_serializer(Protocol::GraphSONV2).await;
+        let graph = connect_serializer(IoProtocol::GraphSONV2).await;
 
         assert_eq!(
             0,
@@ -39,7 +39,7 @@ mod aio {
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     #[cfg_attr(feature = "tokio-runtime", tokio::test)]
     async fn test_wrong_query_v2() {
-        let error = connect_serializer(Protocol::GraphSONV2)
+        let error = connect_serializer(IoProtocol::GraphSONV2)
             .await
             .execute("g.V", &[])
             .await
@@ -57,7 +57,7 @@ mod aio {
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     #[cfg_attr(feature = "tokio-runtime", tokio::test)]
     async fn test_wrong_alias_v2() {
-        let error = connect_serializer(Protocol::GraphSONV2)
+        let error = connect_serializer(IoProtocol::GraphSONV2)
             .await
             .alias("foo")
             .execute("g.V()", &[])
@@ -77,7 +77,7 @@ mod aio {
     #[cfg_attr(feature = "tokio-runtime", tokio::test)]
 
     async fn test_vertex_query_v2() {
-        let graph = connect_serializer(Protocol::GraphSONV2).await;
+        let graph = connect_serializer(IoProtocol::GraphSONV2).await;
 
         println!("About to execute query.");
         let vertices = graph
@@ -98,7 +98,7 @@ mod aio {
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     #[cfg_attr(feature = "tokio-runtime", tokio::test)]
     async fn test_edge_query_v2() {
-        let graph = connect_serializer(Protocol::GraphSONV2).await;
+        let graph = connect_serializer(IoProtocol::GraphSONV2).await;
         let edges = graph
             .execute("g.E().hasLabel('knows').limit(1)", &[])
             .await
@@ -115,7 +115,7 @@ mod aio {
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     #[cfg_attr(feature = "tokio-runtime", tokio::test)]
     async fn test_vertex_creation_v2() {
-        let graph = connect_serializer(Protocol::GraphSONV2).await;
+        let graph = connect_serializer(IoProtocol::GraphSONV2).await;
         let mark = create_vertex(&graph, "mark").await;
 
         assert_eq!("person", mark.label());
@@ -141,7 +141,7 @@ mod aio {
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     #[cfg_attr(feature = "tokio-runtime", tokio::test)]
     async fn test_edge_creation_v2() {
-        let graph = connect_serializer(Protocol::GraphSONV2).await;
+        let graph = connect_serializer(IoProtocol::GraphSONV2).await;
         let mark = create_vertex(&graph, "mark").await;
         let frank = create_vertex(&graph, "frank").await;
 

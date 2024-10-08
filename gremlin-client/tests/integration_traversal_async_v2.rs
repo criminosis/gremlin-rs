@@ -13,12 +13,12 @@ mod aio {
     #[cfg(feature = "tokio-runtime")]
     use tokio_stream::StreamExt;
 
-    use gremlin_client::{Protocol, Vertex};
+    use gremlin_client::{IoProtocol, Vertex};
 
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     #[cfg_attr(feature = "tokio-runtime", tokio::test)]
     async fn test_simple_vertex_traversal_with_multiple_id_v2() {
-        let client = connect_serializer(Protocol::GraphSONV2).await;
+        let client = connect_serializer(IoProtocol::GraphSONV2).await;
         drop_vertices(&client, "test_simple_vertex_traversal_async")
             .await
             .unwrap();
