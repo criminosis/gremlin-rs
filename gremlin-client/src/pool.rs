@@ -40,25 +40,12 @@ impl ManageConnection for GremlinConnectionManager {
             String::from("language"),
             GValue::String(String::from("gremlin-groovy")),
         );
-        let args = self.options.serializer.write(&GValue::from(args))?;
-
-        let message = match self.options.serializer {
-            IoProtocol::GraphSONV2 => message_with_args_v2(String::from("eval"), String::default(), args),
-            IoProtocol::GraphSONV3 => message_with_args(String::from("eval"), String::default(), args),
-        };
-
-        let msg = serde_json::to_string(&message).map_err(GremlinError::from)?;
-
-        let content_type = self.options.serializer.content_type();
-        let payload = String::from("") + content_type + &msg;
-
-        let mut binary = payload.into_bytes();
-        binary.insert(0, content_type.len() as u8);
-
-        conn.send(binary)?;
+        
+        let message = self.options.serializer.build_eval_message(args)?;
+        conn.send(message)?;
 
         let result = conn.recv()?;
-        let response: Response = serde_json::from_slice(&result)?;
+        let response = self.options.deserializer.read_response(&result)?;
 
         match response.status.code {
             200 | 206 => Ok(()),
@@ -91,20 +78,21 @@ impl ManageConnection for GremlinConnectionManager {
                     conn.send(binary)?;
 
                     let result = conn.recv()?;
-                    let response: Response = serde_json::from_slice(&result)?;
+                    todo!()
+                    // let response: Response = serde_json::from_slice(&result)?;
 
-                    match response.status.code {
-                        200 | 206 => Ok(()),
-                        204 => Ok(()),
-                        401 => Ok(()),
-                        // 401 is actually a username/password incorrect error, but if not
-                        // not returned as okay, the pool loops infinitely trying
-                        // to authenticate.
-                        _ => Err(GremlinError::Request((
-                            response.status.code,
-                            response.status.message,
-                        ))),
-                    }
+                    // match response.status.code {
+                    //     200 | 206 => Ok(()),
+                    //     204 => Ok(()),
+                    //     401 => Ok(()),
+                    //     // 401 is actually a username/password incorrect error, but if not
+                    //     // not returned as okay, the pool loops infinitely trying
+                    //     // to authenticate.
+                    //     _ => Err(GremlinError::Request((
+                    //         response.status.code,
+                    //         response.status.message,
+                    //     ))),
+                    // }
                 }
                 None => Err(GremlinError::Request((
                     response.status.code,

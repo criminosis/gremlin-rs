@@ -7,10 +7,10 @@ use uuid::Uuid;
 #[serde(rename_all = "camelCase")]
 pub struct RequestIdV2 {
     #[serde(rename = "@type")]
-    id_type: String,
+    pub id_type: String,
 
     #[serde(rename = "@value")]
-    value: Uuid,
+    pub value: Uuid,
 }
 
 #[derive(Serialize)]

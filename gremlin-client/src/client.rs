@@ -24,13 +24,19 @@ impl SessionedClient {
             let processor = "session".to_string();
 
             let message = match self.options.serializer {
-                IoProtocol::GraphSONV2 => message_with_args_v2(String::from("close"), processor, args),
+                IoProtocol::GraphSONV2 => {
+                    message_with_args_v2(String::from("close"), processor, args)
+                }
                 IoProtocol::GraphSONV3 => message_with_args(String::from("close"), processor, args),
+                IoProtocol::GraphBinaryV1 => {
+                    todo!("Need to add the handling logic for writing to a processor op")
+                }
             };
 
             let conn = self.pool.get()?;
 
-            self.send_message(conn, message)
+            todo!()
+            // self.send_message(conn, message)
         } else {
             Err(GremlinError::Generic("No session to close".to_string()))
         }
@@ -138,37 +144,23 @@ impl GremlinClient {
         let message = match self.options.serializer {
             IoProtocol::GraphSONV2 => message_with_args_v2(String::from("eval"), processor, args),
             IoProtocol::GraphSONV3 => message_with_args(String::from("eval"), processor, args),
+            IoProtocol::GraphBinaryV1 => {
+                todo!("Need to add the handling logic for writing to a processor op")
+            }
         };
 
         let conn = self.pool.get()?;
 
-        self.send_message(conn, message)
+        // self.send_message(conn, message)
+        todo!()
     }
 
-    pub(crate) fn write_message<T: Serialize>(
-        &self,
-        conn: &mut r2d2::PooledConnection<GremlinConnectionManager>,
-        msg: Message<T>,
-    ) -> GremlinResult<()> {
-        let message = self.build_message(msg)?;
-
-        let content_type = self.options.serializer.content_type();
-        let payload = String::from("") + content_type + &message;
-
-        let mut binary = payload.into_bytes();
-        binary.insert(0, content_type.len() as u8);
-
-        conn.send(binary)?;
-
-        Ok(())
-    }
-
-    pub(crate) fn send_message<T: Serialize>(
+    pub(crate) fn send_message(
         &self,
         mut conn: r2d2::PooledConnection<GremlinConnectionManager>,
-        msg: Message<T>,
+        msg: Vec<u8>,
     ) -> GremlinResult<GResultSet> {
-        self.write_message(&mut conn, msg)?;
+        conn.send(msg)?;
 
         let (response, results) = self.read_response(&mut conn)?;
 
@@ -206,7 +198,26 @@ impl GremlinClient {
     }
 
     pub(crate) fn submit_traversal(&self, bytecode: &Bytecode) -> GremlinResult<GResultSet> {
-        let message = self.generate_message(bytecode)?;
+        let aliases = self
+            .alias
+            .clone()
+            .or_else(|| Some(String::from("g")))
+            .map(|s| {
+                let mut map = HashMap::new();
+                map.insert(String::from("g"), GValue::String(s));
+                map
+            })
+            .unwrap_or_else(HashMap::new);
+
+        let message = self
+            .options
+            .serializer
+            .build_traversal_message(aliases, bytecode)?;
+        
+        if true {
+            let message: Vec<i8> = message.into_iter().map(|byte| byte as i8).collect();
+            panic!("{:?}", message);
+        }
 
         let conn = self.pool.get()?;
 
@@ -218,7 +229,7 @@ impl GremlinClient {
         conn: &mut r2d2::PooledConnection<GremlinConnectionManager>,
     ) -> GremlinResult<(Response, VecDeque<GValue>)> {
         let result = conn.recv()?;
-        let response: Response = serde_json::from_slice(&result)?;
+        let response = self.options.deserializer.read_response(&result)?;
 
         match response.status.code {
             200 | 206 => {
@@ -249,9 +260,10 @@ impl GremlinClient {
                         args,
                     );
 
-                    self.write_message(conn, message)?;
+                    todo!()
+                    // self.write_message(conn, message)?;
 
-                    self.read_response(conn)
+                    // self.read_response(conn)
                 }
                 None => Err(GremlinError::Request((
                     response.status.code,
@@ -264,7 +276,9 @@ impl GremlinClient {
             ))),
         }
     }
+
     fn build_message<T: Serialize>(&self, msg: Message<T>) -> GremlinResult<String> {
+        //TODO this should be gone by the end
         serde_json::to_string(&msg).map_err(GremlinError::from)
     }
 }

@@ -28,6 +28,7 @@ impl SessionedClient {
             let message = match self.options.serializer {
                 IoProtocol::GraphSONV2 => message_with_args_v2(String::from("close"), processor, args),
                 IoProtocol::GraphSONV3 => message_with_args(String::from("close"), processor, args),
+                IoProtocol::GraphBinaryV1 => todo!("Need to add the handling logic for writing to a processor op")
             };
 
             let conn = self.pool.get().await?;
@@ -142,6 +143,7 @@ impl GremlinClient {
         let message = match self.options.serializer {
             IoProtocol::GraphSONV2 => message_with_args_v2(String::from("eval"), processor, args),
             IoProtocol::GraphSONV3 => message_with_args(String::from("eval"), processor, args),
+            IoProtocol::GraphBinaryV1 => todo!("Need to add the handling logic for writing to a processor op")
         };
 
         let conn = self.pool.get().await?;
