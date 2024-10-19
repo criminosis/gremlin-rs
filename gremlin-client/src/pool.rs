@@ -41,7 +41,7 @@ impl ManageConnection for GremlinConnectionManager {
             GValue::String(String::from("gremlin-groovy")),
         );
         
-        let message = self.options.serializer.build_eval_message(args)?;
+        let (_, message) = self.options.serializer.build_message("eval", "", args, None)?;
         conn.send(message)?;
 
         let result = conn.recv()?;
@@ -59,40 +59,24 @@ impl ManageConnection for GremlinConnectionManager {
                         GValue::String(encode(&format!("\0{}\0{}", c.username, c.password))),
                     );
 
-                    let args = self.options.serializer.write(&GValue::from(args))?;
-                    let message = message_with_args_and_uuid(
-                        String::from("authentication"),
-                        String::from("traversal"),
-                        response.request_id,
-                        args,
-                    );
-
-                    let msg = serde_json::to_string(&message).map_err(GremlinError::from)?;
-
-                    let content_type = self.options.serializer.content_type();
-                    let payload = String::from("") + content_type + &msg;
-
-                    let mut binary = payload.into_bytes();
-                    binary.insert(0, content_type.len() as u8);
-
-                    conn.send(binary)?;
+                    let (_, message)= self.options.serializer.build_message("authentication", "traversal", args, Some(response.request_id))?;
+                    conn.send(message)?;
 
                     let result = conn.recv()?;
-                    todo!()
-                    // let response: Response = serde_json::from_slice(&result)?;
+                    let response = self.options.deserializer.read_response(&result)?;
 
-                    // match response.status.code {
-                    //     200 | 206 => Ok(()),
-                    //     204 => Ok(()),
-                    //     401 => Ok(()),
-                    //     // 401 is actually a username/password incorrect error, but if not
-                    //     // not returned as okay, the pool loops infinitely trying
-                    //     // to authenticate.
-                    //     _ => Err(GremlinError::Request((
-                    //         response.status.code,
-                    //         response.status.message,
-                    //     ))),
-                    // }
+                    match response.status.code {
+                        200 | 206 => Ok(()),
+                        204 => Ok(()),
+                        401 => Ok(()),
+                        // 401 is actually a username/password incorrect error, but if not
+                        // not returned as okay, the pool loops infinitely trying
+                        // to authenticate.
+                        _ => Err(GremlinError::Request((
+                            response.status.code,
+                            response.status.message,
+                        ))),
+                    }
                 }
                 None => Err(GremlinError::Request((
                     response.status.code,

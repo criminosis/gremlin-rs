@@ -40,22 +40,8 @@ impl Manager for GremlinConnectionManager {
             String::from("language"),
             GValue::String(String::from("gremlin-groovy")),
         );
-        let args = self.options.serializer.write(&GValue::from(args))?;
 
-        let message = match self.options.serializer {
-            IoProtocol::GraphSONV2 => message_with_args_v2(String::from("eval"), String::default(), args),
-            IoProtocol::GraphSONV3 => message_with_args(String::from("eval"), String::default(), args),
-            IoProtocol::GraphBinaryV1 => todo!("Need to add the handling logic for writing to a processor op")
-        };
-
-        let id = message.id().clone();
-        let msg = serde_json::to_string(&message).map_err(GremlinError::from)?;
-
-        let content_type = self.options.serializer.content_type();
-
-        let payload = String::from("") + content_type + &msg;
-        let mut binary = payload.into_bytes();
-        binary.insert(0, content_type.len() as u8);
+        let (id, message) = self.options.serializer.build_message("eval", "", args, None)?;
 
         let (response, _receiver) = conn.send(id, binary).await?;
 
@@ -71,25 +57,8 @@ impl Manager for GremlinConnectionManager {
                         GValue::String(encode(&format!("\0{}\0{}", c.username, c.password))),
                     );
 
-                    let args = self.options.serializer.write(&GValue::from(args))?;
-                    let message = message_with_args_and_uuid(
-                        String::from("authentication"),
-                        String::from("traversal"),
-                        response.request_id,
-                        args,
-                    );
-
-                    let id = message.id().clone();
-                    let msg = serde_json::to_string(&message).map_err(GremlinError::from)?;
-
-                    let content_type = self.options.serializer.content_type();
-                    let payload = String::from("") + content_type + &msg;
-
-                    let mut binary = payload.into_bytes();
-                    binary.insert(0, content_type.len() as u8);
-
-                    let (response, _receiver) = conn.send(id, binary).await?;
-
+                    let (id, message) = self.options.serializer.build_message("authentication", "traversal", args, Some(response.request_id))?;
+                    let (response, _receiver) = conn.send(id, message).await?;
                     match response.status.code {
                         200 | 206 => Ok(conn),
                         204 => Ok(conn),

@@ -5,17 +5,17 @@ mod serializer_v2;
 mod serializer_v3;
 
 use crate::conversion::ToGValue;
-use crate::message::{Response, RequestIdV2};
+use crate::message::{RequestIdV2, Response};
 use crate::process::traversal::{Bytecode, Order, Scope};
 use crate::structure::{Cardinality, Direction, GValue, Merge, T};
 use serde_json::{json, Map, Value};
-use uuid::Uuid;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::f64::consts::E;
 use std::string::ToString;
+use uuid::Uuid;
 
-use crate::{GKey, GremlinError, GremlinResult, Message, io::graph_binary_v1::GraphBinaryV1Serde};
+use crate::{io::graph_binary_v1::GraphBinaryV1Serde, GKey, GremlinError, GremlinResult, Message};
 
 #[derive(Debug, Clone)]
 pub enum IoProtocol {
@@ -25,7 +25,6 @@ pub enum IoProtocol {
 }
 
 impl IoProtocol {
-    //TODO maybe we could remove pub from read/write?
     pub fn read(&self, value: &Value) -> GremlinResult<Option<GValue>> {
         if let Value::Null = value {
             return Ok(None);
@@ -37,55 +36,56 @@ impl IoProtocol {
         }
     }
 
-    pub fn write(&self, value: &GValue) -> GremlinResult<Value> {
+    pub fn read_response(&self, response: &[u8]) -> GremlinResult<Response> {
         match self {
-            IoProtocol::GraphSONV2 | IoProtocol::GraphSONV3 => self.write_graphson(value),
+            IoProtocol::GraphSONV2 | IoProtocol::GraphSONV3 => {
+                serde_json::from_slice(&response).map_err(GremlinError::from)
+            }
             IoProtocol::GraphBinaryV1 => todo!(),
         }
     }
 
-    pub fn read_response(&self, response: &[u8]) -> GremlinResult<Response>{
-        match self {
-            IoProtocol::GraphSONV2 | IoProtocol::GraphSONV3 => serde_json::from_slice(&response).map_err(GremlinError::from),
-            IoProtocol::GraphBinaryV1 => todo!()
-        }
-    }
-
-    pub fn build_eval_message(&self, args: HashMap<String, GValue>) -> GremlinResult<Vec<u8>>{
-        let op = String::from("eval");
-        let processor = String::default();
+    pub fn build_message(&self, op: &str, processor: &str, args: HashMap<String, GValue>, request_id: Option<Uuid>) -> GremlinResult<(Uuid, Vec<u8>)> {
         let content_type = self.content_type();
-
-        match self {
+        let request_id = request_id.unwrap_or_else(Uuid::new_v4);
+        let message_bytes = match self {
             IoProtocol::GraphSONV2 | IoProtocol::GraphSONV3 => {
-                let args = self.write(&GValue::from(args))?;
+                let op = op.into();
+                let processor = processor.into();
+                let args = self.write_graphson(&GValue::from(args))?;
                 let message = match self {
                     IoProtocol::GraphSONV2 => Message::V2 {
-                    request_id: RequestIdV2 {
-                        id_type: "g:UUID".to_string(),
-                        value: Uuid::new_v4(),
+                        request_id: RequestIdV2 {
+                            id_type: "g:UUID".to_string(),
+                            value: request_id,
+                        },
+                        op,
+                        processor,
+                        args,
                     },
-                    op,
-                    processor,
-                    args,
-                }, 
-                IoProtocol::GraphSONV3 => {
-                    Message::V3 { request_id: Uuid::new_v4(), op, processor, args}
-                }
-                _ => panic!("Invalid branch")
-            };
+                    IoProtocol::GraphSONV3 => Message::V3 {
+                        request_id,
+                        op,
+                        processor,
+                        args,
+                    },
+                    _ => unreachable!("Invalid branch"),
+                };
 
                 let msg = serde_json::to_string(&message).map_err(GremlinError::from)?;
                 let payload = String::from("") + content_type + &msg;
                 let mut binary = payload.into_bytes();
                 binary.insert(0, content_type.len() as u8);
-                Ok(binary)
+                binary
             }
             IoProtocol::GraphBinaryV1 => {
                 let mut message_bytes: Vec<u8> = Vec::new();
                 //Need to write header first, its length is a Byte not a Int
                 let header = String::from(content_type);
-                let header_length: u8 = header.len().try_into().expect("Header length should fit in u8");
+                let header_length: u8 = header
+                    .len()
+                    .try_into()
+                    .expect("Header length should fit in u8");
                 message_bytes.push(header_length);
                 message_bytes.extend_from_slice(header.as_bytes());
 
@@ -93,7 +93,7 @@ impl IoProtocol {
                 message_bytes.push(0x81);
 
                 //Request Id
-                Uuid::new_v4().to_be_bytes(&mut message_bytes)?;
+                request_id.to_be_bytes(&mut message_bytes)?;
 
                 //Op
                 op.to_be_bytes(&mut message_bytes)?;
@@ -102,93 +102,12 @@ impl IoProtocol {
                 processor.to_be_bytes(&mut message_bytes)?;
 
                 //Args
-                (&GValue::from(args)).to_be_bytes(&mut message_bytes)?;
-                Ok(message_bytes)
-            }
-        }
-    }
-
-    pub fn build_traversal_message(&self, aliases: HashMap<String, GValue>, bytecode: &Bytecode) -> GremlinResult<Vec<u8>> {
-        let mut args = HashMap::new();
-        args.insert(String::from("gremlin"), GValue::Bytecode(bytecode.clone()));
-        args.insert(String::from("aliases"), GValue::from(aliases));
-        let content_type = self.content_type();
-    
-        match self {
-            IoProtocol::GraphSONV2 | IoProtocol::GraphSONV3 => {
-                let args = GValue::from(args);
-                //TODO this should be calling something more congruent with the graphbinary side
-                let args = self.write(&args)?;
-                let message =serde_json::to_string(&Message::V3 {
-                    request_id: Uuid::new_v4(),
-                    op: String::from("bytecode"),
-                    processor: String::from("traversal"),
-                    args,
-                }).map_err(GremlinError::from)?;
-                
-                let payload = String::from("") + content_type + &message;
-                let mut binary = payload.into_bytes();
-                binary.insert(0, content_type.len() as u8);
-                Ok(binary)
-            }
-            IoProtocol::GraphBinaryV1 => {
-                let mut message_bytes: Vec<u8> = Vec::new();
-                //Need to write header first, its length is a Byte not a Int
-                let header = String::from(content_type);
-                let header_length: u8 = header.len().try_into().expect("Header length should fit in u8");
-                message_bytes.push(header_length);
-                message_bytes.extend_from_slice(header.as_bytes());
-
-                //Version byte
-                message_bytes.push(0x81);
-
-                //Request Id
-                Uuid::new_v4().to_be_bytes(&mut message_bytes)?;
-
-                //Op
-                String::from("bytecode").to_be_bytes(&mut message_bytes)?;
-
-                //Processor
-                String::from("traversal").to_be_bytes(&mut message_bytes)?;
-
-                //Args
                 args.to_be_bytes(&mut message_bytes)?;
-                Ok(message_bytes)
+                message_bytes
             }
-        }
+        };
+        Ok((request_id, message_bytes))
     }
-
-    //TODO we can probably generalize this
-    // pub fn generate_traversal_message(
-    //     &self,
-    //     aliases: HashMap<String, GValue>,
-    //     bytecode: &Bytecode,
-    // ) -> GremlinResult<Message<serde_json::Value>> {
-    //     let mut args = HashMap::new();
-
-    //     args.insert(String::from("gremlin"), GValue::Bytecode(bytecode.clone()));
-
-    //     // let aliases = self
-    //     //     .alias
-    //     //     .clone()
-    //     //     .or_else(|| Some(String::from("g")))
-    //     //     .map(|s| {
-    //     //         let mut map = HashMap::new();
-    //     //         map.insert(String::from("g"), GValue::String(s));
-    //     //         map
-    //     //     })
-    //     //     .unwrap_or_else(HashMap::new);
-
-    //     args.insert(String::from("aliases"), GValue::from(aliases));
-
-    //     let args = self.write(&GValue::from(args))?;
-
-    //     Ok(message_with_args(
-    //         String::from("bytecode"),
-    //         String::from("traversal"),
-    //         args,
-    //     ))
-    // }
 
     fn write_graphson(&self, value: &GValue) -> GremlinResult<Value> {
         match (self, value) {
@@ -218,11 +137,11 @@ impl IoProtocol {
                 "@value" : d.timestamp_millis()
             })),
             (IoProtocol::GraphSONV2, GValue::List(d)) => {
-                let elements: GremlinResult<Vec<Value>> = d.iter().map(|e| self.write(e)).collect();
+                let elements: GremlinResult<Vec<Value>> = d.iter().map(|e| self.write_graphson(e)).collect();
                 Ok(json!(elements?))
             }
             (IoProtocol::GraphSONV3, GValue::List(d)) => {
-                let elements: GremlinResult<Vec<Value>> = d.iter().map(|e| self.write(e)).collect();
+                let elements: GremlinResult<Vec<Value>> = d.iter().map(|e| self.write_graphson(e)).collect();
                 Ok(json!({
                     "@type" : "g:List",
                     "@value" : elements?
@@ -232,7 +151,7 @@ impl IoProtocol {
                 "@type" : "g:P",
                 "@value" : {
                     "predicate" : p.operator(),
-                    "value" : self.write(p.value())?
+                    "value" : self.write_graphson(p.value())?
                 }
             })),
             (_, GValue::Bytecode(code)) => {
@@ -244,7 +163,7 @@ impl IoProtocol {
                         instruction.push(Value::String(m.operator().clone()));
 
                         let arguments: GremlinResult<Vec<Value>> =
-                            m.args().iter().map(|a| self.write(a)).collect();
+                            m.args().iter().map(|a| self.write_graphson(a)).collect();
 
                         instruction.extend(arguments?);
                         Ok(Value::Array(instruction))
@@ -259,7 +178,7 @@ impl IoProtocol {
                         instruction.push(Value::String(m.operator().clone()));
 
                         let arguments: GremlinResult<Vec<Value>> =
-                            m.args().iter().map(|a| self.write(a)).collect();
+                            m.args().iter().map(|a| self.write_graphson(a)).collect();
 
                         instruction.extend(arguments?);
                         Ok(Value::Array(instruction))
@@ -274,7 +193,7 @@ impl IoProtocol {
                 }))
             }
             (_, GValue::Vertex(v)) => {
-                let id = self.write(&v.id().to_gvalue())?;
+                let id = self.write_graphson(&v.id().to_gvalue())?;
                 Ok(json!({
                     "@type" : "g:Vertex",
                     "@value" : {
@@ -287,13 +206,13 @@ impl IoProtocol {
 
                 for (k, v) in map.iter() {
                     params.insert(
-                        self.write(&k.clone().into())?
+                        self.write_graphson(&k.clone().into())?
                             .as_str()
                             .ok_or_else(|| {
                                 GremlinError::Generic("Non-string key value.".to_string())
                             })?
                             .to_string(),
-                        self.write(&v)?,
+                        self.write_graphson(&v)?,
                     );
                 }
 
@@ -303,8 +222,8 @@ impl IoProtocol {
                 let mut params = vec![];
 
                 for (k, v) in map.iter() {
-                    params.push(self.write(&k.clone().into())?);
-                    params.push(self.write(&v)?);
+                    params.push(self.write_graphson(&k.clone().into())?);
+                    params.push(self.write_graphson(&v)?);
                 }
 
                 Ok(json!({
@@ -360,7 +279,7 @@ impl IoProtocol {
                 "@type" : "g:TextP",
                 "@value" : {
                     "predicate" : text_p.operator(),
-                    "value" : self.write(text_p.value())?
+                    "value" : self.write_graphson(text_p.value())?
                 }
             })),
             (_, GValue::Pop(pop)) => Ok(json!({

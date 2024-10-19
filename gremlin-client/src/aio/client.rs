@@ -13,6 +13,7 @@ use futures::future::{BoxFuture, FutureExt};
 use mobc::{Connection, Pool};
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
+use uuid::Uuid;
 
 pub type SessionedClient = GremlinClient;
 
@@ -21,19 +22,14 @@ impl SessionedClient {
         if let Some(session_name) = self.session.take() {
             let mut args = HashMap::new();
             args.insert(String::from("session"), GValue::from(session_name.clone()));
-            let args = self.options.serializer.write(&GValue::from(args))?;
-
-            let processor = "session".to_string();
-
-            let message = match self.options.serializer {
-                IoProtocol::GraphSONV2 => message_with_args_v2(String::from("close"), processor, args),
-                IoProtocol::GraphSONV3 => message_with_args(String::from("close"), processor, args),
-                IoProtocol::GraphBinaryV1 => todo!("Need to add the handling logic for writing to a processor op")
-            };
+            let (id, message) = self
+                .options
+                .serializer
+                .build_message("close", "session", args, None)?;
 
             let conn = self.pool.get().await?;
 
-            self.send_message_new(conn, message).await
+            self.send_message_new(conn, id, message).await
         } else {
             Err(GremlinError::Generic("No session to close".to_string()))
         }
@@ -132,39 +128,29 @@ impl GremlinClient {
             args.insert(String::from("session"), GValue::from(session_name.clone()));
         }
 
-        let args = self.options.serializer.write(&GValue::from(args))?;
-
         let processor = if self.session.is_some() {
-            "session".to_string()
+            "session"
         } else {
-            String::default()
+            ""
         };
 
-        let message = match self.options.serializer {
-            IoProtocol::GraphSONV2 => message_with_args_v2(String::from("eval"), processor, args),
-            IoProtocol::GraphSONV3 => message_with_args(String::from("eval"), processor, args),
-            IoProtocol::GraphBinaryV1 => todo!("Need to add the handling logic for writing to a processor op")
-        };
+        let (id, message) = self
+            .options
+            .serializer
+            .build_message("eval", processor, args, None)?;
 
         let conn = self.pool.get().await?;
 
-        self.send_message_new(conn, message).await
+        self.send_message_new(conn, id, message).await
     }
 
     pub(crate) fn send_message_new<'a, T: Serialize>(
         &'a self,
         mut conn: Connection<GremlinConnectionManager>,
-        msg: Message<T>,
+        id: Uuid,
+        binary: Vec<u8>,
     ) -> BoxFuture<'a, GremlinResult<GResultSet>> {
-        let id = msg.id().clone();
-        let message = self.build_message(msg).unwrap();
-
         async move {
-            let content_type = self.options.serializer.content_type();
-            let payload = String::from("") + content_type + &message;
-            let mut binary = payload.into_bytes();
-            binary.insert(0, content_type.len() as u8);
-
             let (response, receiver) = conn.send(id, binary).await?;
 
             let (response, results) = match response.status.code {
@@ -187,15 +173,14 @@ impl GremlinClient {
                             GValue::String(encode(&format!("\0{}\0{}", c.username, c.password))),
                         );
 
-                        let args = self.options.serializer.write(&GValue::from(args))?;
-                        let message = message_with_args_and_uuid(
-                            String::from("authentication"),
-                            String::from("traversal"),
-                            response.request_id,
+                        let (id, message) = self.options.serializer.build_message(
+                            "authentication",
+                            "traversal",
                             args,
-                        );
+                            Some(response.request_id),
+                        )?;
 
-                        return self.send_message_new(conn, message).await;
+                        return self.send_message_new(conn, id, message).await;
                     }
                     None => Err(GremlinError::Request((
                         response.status.code,
@@ -231,16 +216,13 @@ impl GremlinClient {
 
         args.insert(String::from("aliases"), GValue::from(aliases));
 
-        let args = self.options.serializer.write(&GValue::from(args))?;
-
-        let message = message_with_args(String::from("bytecode"), String::from("traversal"), args);
+        let (id, message) = self
+            .options
+            .serializer
+            .build_message("bytecode", "traversal", args, None)?;
 
         let conn = self.pool.get().await?;
 
-        self.send_message_new(conn, message).await
-    }
-
-    fn build_message<T: Serialize>(&self, msg: Message<T>) -> GremlinResult<String> {
-        serde_json::to_string(&msg).map_err(GremlinError::from)
+        self.send_message_new(conn, id, message).await
     }
 }
