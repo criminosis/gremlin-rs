@@ -1,20 +1,59 @@
 use std::{
     collections::HashMap,
     convert::TryInto,
-    fmt::{self, Display},
-    io::Read,
 };
 
-use serde::{de, ser, Serialize};
 use uuid::Uuid;
 
 use crate::{process::traversal::Instruction, GKey, GValue, GremlinError, GremlinResult};
 
-struct RequestV1 {
-    version: u8,
-    request_id: Uuid,
-    op: String,
-    args: HashMap<GKey, GValue>,
+use super::IoProtocol;
+
+pub(crate) struct RequestMessage<'a, 'b> {
+    pub(crate) request_id: Uuid,
+    pub(crate) op: &'a str,
+    pub(crate) processor: &'b str,
+    pub(crate) args: HashMap<String, GValue>,
+}
+
+impl<'a, 'b> GraphBinaryV1Ser for RequestMessage<'a, 'b> {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        //Need to write header first, its length is a Byte not a Int
+        let header = IoProtocol::GraphBinaryV1.content_type();
+        let header_length: u8 = header
+            .len()
+            .try_into()
+            .expect("Header length should fit in u8");
+        buf.push(header_length);
+        buf.extend_from_slice(header.as_bytes());
+
+        //Version byte is 0x81 for this version
+        buf.push(0x81);
+
+        //Request Id
+        self.request_id.to_be_bytes(buf)?;
+
+        //Op
+        self.op.to_be_bytes(buf)?;
+
+        //Processor
+        self.processor.to_be_bytes(buf)?;
+
+        //Args
+        let args_length: i32 = self
+            .args
+            .len()
+            .try_into()
+            .map_err(|_| GremlinError::Cast(format!("Args exceeds i32 length limit")))?;
+        GraphBinaryV1Ser::to_be_bytes(args_length, buf)?;
+        for (k, v) in self.args.into_iter() {
+            //Both keys and values need to be fully qualified here, so turn
+            //the keys into a GValue
+            GValue::from(k).to_be_bytes(buf)?;
+            v.to_be_bytes(buf)?;
+        }
+        Ok(())
+    }
 }
 
 //https://tinkerpop.apache.org/docs/3.7.2/dev/io/#_data_type_codes
@@ -35,10 +74,10 @@ struct RequestV1 {
 fn write_usize_as_i32_be_bytes(val: usize, buf: &mut Vec<u8>) -> GremlinResult<()> {
     let val_i32 = TryInto::<i32>::try_into(val)
         .map_err(|_| GremlinError::Cast(format!("Invalid usize bytes exceed i32")))?;
-    GraphBinaryV1Serde::to_be_bytes(val_i32, buf)
+    GraphBinaryV1Ser::to_be_bytes(val_i32, buf)
 }
 
-impl GraphBinaryV1Serde for &GValue {
+impl GraphBinaryV1Ser for &GValue {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         match self {
             GValue::Null => {
@@ -58,7 +97,7 @@ impl GraphBinaryV1Serde for &GValue {
                 //Empty value flag
                 buf.push(0x00);
                 //then value bytes
-                GraphBinaryV1Serde::to_be_bytes(*value, buf)?;
+                GraphBinaryV1Ser::to_be_bytes(*value, buf)?;
             }
             // GValue::Int64(_) => todo!(),
             // GValue::Float(_) => todo!(),
@@ -91,7 +130,7 @@ impl GraphBinaryV1Serde for &GValue {
                 //Format: {length}{text_value}
                 // {length} is an Int describing the byte length of the text. Length is a positive number or zero to represent the empty string.
                 // {text_value} is a sequence of bytes representing the string value in UTF8 encoding.
-                GraphBinaryV1Serde::to_be_bytes(value.as_str(), buf)?;
+                GraphBinaryV1Ser::to_be_bytes(value.as_str(), buf)?;
             }
             // GValue::Path(path) => todo!(),
             // GValue::TraversalMetrics(traversal_metrics) => todo!(),
@@ -119,7 +158,7 @@ impl GraphBinaryV1Serde for &GValue {
                 ) -> GremlinResult<()> {
                     write_usize_as_i32_be_bytes(instructions.len(), buf)?;
                     for instruction in instructions {
-                        GraphBinaryV1Serde::to_be_bytes(instruction.operator().as_str(), buf)?;
+                        GraphBinaryV1Ser::to_be_bytes(instruction.operator().as_str(), buf)?;
                         write_usize_as_i32_be_bytes(instruction.args().len(), buf)?;
                         instruction
                             .args()
@@ -161,13 +200,9 @@ impl GraphBinaryV1Serde for &GValue {
         }
         Ok(())
     }
-
-    // fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
-    //     todo!()
-    // }
 }
 
-impl GraphBinaryV1Serde for &GKey {
+impl GraphBinaryV1Ser for &GKey {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         match self {
             GKey::T(t) => todo!(),
@@ -178,277 +213,212 @@ impl GraphBinaryV1Serde for &GKey {
             GKey::Direction(direction) => todo!(),
         }
     }
-
-    // fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
-    //     todo!()
-    // }
 }
-
-impl<K: Into<GKey>, V: Into<GValue>> GraphBinaryV1Serde for HashMap<K, V> {
-    //This represents a complicated meeting point. The request message has a non-qualified emission of a map
-    //for the arguments, but the contained elements needs to be fully qualified
-    //Ideally this would just be K: GraphBinaryV1Serde & V: GraphBinaryV1Serde
-    //but that exposes as a type declaration emission things like HashMap<String, String> which will then
-    //invoke the value bytes only impl for String and not doing the qualified and then be rejected by the server
-    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
-        write_usize_as_i32_be_bytes(self.len(), buf)?;
-        for (k, v) in self {
-            //TODO we could just move this logic into mod.rs since it's a detail about the nature of
-            //how the request message is implemented, and not the generialized notion of how to write a HashMap
-            //That'd also duck the issue of passing through GKey here
-            let k: GKey = k.into();
-            let v: GValue = v.into();
-            k.to_be_bytes(buf)?;
-            v.to_be_bytes(buf)?;
-        }
-        Ok(())
-    }
-
-    // fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
-    //     todo!()
-    // }
-}
-
-fn deserialize<'a, T: Iterator<Item = &'a u8>>(mut value: T) -> GremlinResult<GValue> {
-    let data_code = value
-        .next()
-        .ok_or_else(|| GremlinError::Cast(format!("Invalid bytes no data code byte")))?;
-    match data_code {
-        // GValue::Null => {
-        //     buf.reserve_exact(2);
-        //     //Type code of 0xfe: Unspecified null object
-        //     buf.push(0xfe);
-        //     //Then the null {value_flag} set and no sequence of bytes.
-        //     buf.push(0x01);
-        // }
-        // GValue::Vertex(vertex) => todo!(),
-        // GValue::Edge(edge) => todo!(),
-        // GValue::VertexProperty(vertex_property) => todo!(),
-        // GValue::Property(property) => todo!(),
-        // GValue::Uuid(uuid) => todo!(),
-        0x01 => {
-            //Type code of 0x01: Integer
-            //Check null flag
-            match value.next() {
-                Some(0x00) => {
-                    //We've got a value to parse
-                    // GraphBinaryV1Serde::from_be_bytes(&mut value).map(GValue::Int32)
-                    todo!()
-                }
-                Some(0x01) => Ok(GValue::Null),
-                _ => Err(GremlinError::Cast(format!("Invalid bytes into i32"))),
-            }
-        }
-        // GValue::Int64(_) => todo!(),
-        // GValue::Float(_) => todo!(),
-        // GValue::Double(_) => todo!(),
-        // GValue::Date(date_time) => todo!(),
-        // GValue::List(list) => todo!(),
-        // GValue::Set(set) => todo!(),
-        // GValue::Map(map) => todo!(),
-        // GValue::Token(token) => todo!(),
-        0x03 => {
-            //Type code of 0x03: String
-            match value.next() {
-                Some(0x00) => {
-                    //We've got a value to parse
-                    // GraphBinaryV1Serde::from_be_bytes(&mut value).map(GValue::String)
-                    todo!()
-                }
-                Some(0x01) => Ok(GValue::Null),
-                _ => Err(GremlinError::Cast(format!("Invalid bytes into String"))),
-            }
-
-            // GValue::String(value) => {
-            //
-            //     //Empty value flag
-            //     //Format: {length}{text_value}
-            //     // {length} is an Int describing the byte length of the text. Length is a positive number or zero to represent the empty string.
-            //     // {text_value} is a sequence of bytes representing the string value in UTF8 encoding.
-        }
-        // GValue::Path(path) => todo!(),
-        // GValue::TraversalMetrics(traversal_metrics) => todo!(),
-        // GValue::Metric(metric) => todo!(),
-        // GValue::TraversalExplanation(traversal_explanation) => todo!(),
-        // GValue::IntermediateRepr(intermediate_repr) => todo!(),
-        // GValue::P(p) => todo!(),
-        // GValue::T(t) => todo!(),
-        // GValue::Bytecode(code) => {
-        //     //Type code of 0x15: Bytecode
-        //     buf.push(0x15);
-        //     //Empty value flag
-        //     buf.push(0x00);
-        //     //then value bytes
-        //     // {steps_length}{step_0}…​{step_n}{sources_length}{source_0}…​{source_n}
-        //     //{steps_length} is an Int value describing the amount of steps.
-        //     let steps_length: i32 = code.steps().len().try_into().expect("Number of steps should fit in i32");
-        //     buf.extend_from_slice(serialize(&GValue::Int32(steps_length)));
-
-        //     //{step_i} is composed of {name}{values_length}{value_0}…​{value_n}, where:
-        //     //  {name} is a String.
-        //     //  {values_length} is an Int describing the amount values.
-        //     //  {value_i} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} describing the step argument.
-
-        //     let steps: GremlinResult<Vec<Value>> = code
-        //             .steps()
-        //             .iter()
-        //             .map(|m| {
-        //                 let mut instruction = vec![];
-        //                 instruction.push(Value::String(m.operator().clone()));
-
-        //                 let arguments: GremlinResult<Vec<Value>> =
-        //                     m.args().iter().map(|a| self.write(a)).collect();
-
-        //                 instruction.extend(arguments?);
-        //                 Ok(Value::Array(instruction))
-        //             })
-        //             .collect();
-
-        //         let sources: GremlinResult<Vec<Value>> = code
-        //             .sources()
-        //             .iter()
-        //             .map(|m| {
-        //                 let mut instruction = vec![];
-        //                 instruction.push(Value::String(m.operator().clone()));
-
-        //                 let arguments: GremlinResult<Vec<Value>> =
-        //                     m.args().iter().map(|a| self.write(a)).collect();
-
-        //                 instruction.extend(arguments?);
-        //                 Ok(Value::Array(instruction))
-        //             })
-        //             .collect();
-        // }
-        // GValue::Traverser(traverser) => todo!(),
-        // GValue::Scope(scope) => todo!(),
-        // GValue::Order(order) => todo!(),
-        // GValue::Bool(_) => todo!(),
-        // GValue::TextP(text_p) => todo!(),
-        // GValue::Pop(pop) => todo!(),
-        // GValue::Cardinality(cardinality) => todo!(),
-        // GValue::Merge(merge) => todo!(),
-        // GValue::Direction(direction) => todo!(),
-        // GValue::Column(column) => todo!(),
-        _ => unimplemented!("TODO"),
-    }
-}
-
-pub trait GraphBinaryV1Serde: Sized {
+pub trait GraphBinaryV1Ser: Sized {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()>;
-    // fn to_fully_qualified_be_bytes(&self, buf: &mut Vec<u8>) -> GremlinResult<()>;
-    // fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self>;
-    // fn from_fully_qualified_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self>;
-
-    //TODO implement a to_fully_qualified_be_bytes method & from_fully_qualified_be_bytes instead of serialize/deserialize methods
-    // maybe this doesn't make sense, since it would require us to peek the first byte anyways and then match to the that impl to seek over the byte again
 }
 
-impl GraphBinaryV1Serde for &str {
+pub trait GraphBinaryV1Deser: Sized {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self>;
+}
+
+impl GraphBinaryV1Deser for GValue {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        let data_code = bytes
+            .next()
+            .ok_or_else(|| GremlinError::Cast(format!("Invalid bytes no data code byte")))?;
+        match data_code {
+            // GValue::Null => {
+            //     buf.reserve_exact(2);
+            //     //Type code of 0xfe: Unspecified null object
+            //     buf.push(0xfe);
+            //     //Then the null {value_flag} set and no sequence of bytes.
+            //     buf.push(0x01);
+            // }
+            // GValue::Vertex(vertex) => todo!(),
+            // GValue::Edge(edge) => todo!(),
+            // GValue::VertexProperty(vertex_property) => todo!(),
+            // GValue::Property(property) => todo!(),
+            // GValue::Uuid(uuid) => todo!(),
+            0x01 => {
+                //Type code of 0x01: Integer
+                //Check null flag
+                match bytes.next() {
+                    Some(0x00) => {
+                        //We've got a value to parse
+                        GraphBinaryV1Deser::from_be_bytes(bytes).map(GValue::Int32)
+                    }
+                    Some(0x01) => Ok(GValue::Null),
+                    _ => Err(GremlinError::Cast(format!("Invalid bytes into i32"))),
+                }
+            }
+            // GValue::Int64(_) => todo!(),
+            // GValue::Float(_) => todo!(),
+            // GValue::Double(_) => todo!(),
+            // GValue::Date(date_time) => todo!(),
+            // GValue::List(list) => todo!(),
+            // GValue::Set(set) => todo!(),
+            // GValue::Map(map) => todo!(),
+            // GValue::Token(token) => todo!(),
+            0x03 => {
+                //Type code of 0x03: String
+                match bytes.next() {
+                    Some(0x00) => {
+                        //We've got a value to parse
+                        GraphBinaryV1Deser::from_be_bytes(bytes).map(GValue::String)
+                    }
+                    Some(0x01) => Ok(GValue::Null),
+                    _ => Err(GremlinError::Cast(format!("Invalid bytes into String"))),
+                }
+
+                // GValue::String(value) => {
+                //
+                //     //Empty value flag
+                //     //Format: {length}{text_value}
+                //     // {length} is an Int describing the byte length of the text. Length is a positive number or zero to represent the empty string.
+                //     // {text_value} is a sequence of bytes representing the string value in UTF8 encoding.
+            }
+            // GValue::Path(path) => todo!(),
+            // GValue::TraversalMetrics(traversal_metrics) => todo!(),
+            // GValue::Metric(metric) => todo!(),
+            // GValue::TraversalExplanation(traversal_explanation) => todo!(),
+            // GValue::IntermediateRepr(intermediate_repr) => todo!(),
+            // GValue::P(p) => todo!(),
+            // GValue::T(t) => todo!(),
+            // GValue::Bytecode(code) => {
+            //     //Type code of 0x15: Bytecode
+            //     buf.push(0x15);
+            //     //Empty value flag
+            //     buf.push(0x00);
+            //     //then value bytes
+            //     // {steps_length}{step_0}…​{step_n}{sources_length}{source_0}…​{source_n}
+            //     //{steps_length} is an Int value describing the amount of steps.
+            //     let steps_length: i32 = code.steps().len().try_into().expect("Number of steps should fit in i32");
+            //     buf.extend_from_slice(serialize(&GValue::Int32(steps_length)));
+
+            //     //{step_i} is composed of {name}{values_length}{value_0}…​{value_n}, where:
+            //     //  {name} is a String.
+            //     //  {values_length} is an Int describing the amount values.
+            //     //  {value_i} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} describing the step argument.
+
+            //     let steps: GremlinResult<Vec<Value>> = code
+            //             .steps()
+            //             .iter()
+            //             .map(|m| {
+            //                 let mut instruction = vec![];
+            //                 instruction.push(Value::String(m.operator().clone()));
+
+            //                 let arguments: GremlinResult<Vec<Value>> =
+            //                     m.args().iter().map(|a| self.write(a)).collect();
+
+            //                 instruction.extend(arguments?);
+            //                 Ok(Value::Array(instruction))
+            //             })
+            //             .collect();
+
+            //         let sources: GremlinResult<Vec<Value>> = code
+            //             .sources()
+            //             .iter()
+            //             .map(|m| {
+            //                 let mut instruction = vec![];
+            //                 instruction.push(Value::String(m.operator().clone()));
+
+            //                 let arguments: GremlinResult<Vec<Value>> =
+            //                     m.args().iter().map(|a| self.write(a)).collect();
+
+            //                 instruction.extend(arguments?);
+            //                 Ok(Value::Array(instruction))
+            //             })
+            //             .collect();
+            // }
+            // GValue::Traverser(traverser) => todo!(),
+            // GValue::Scope(scope) => todo!(),
+            // GValue::Order(order) => todo!(),
+            // GValue::Bool(_) => todo!(),
+            // GValue::TextP(text_p) => todo!(),
+            // GValue::Pop(pop) => todo!(),
+            // GValue::Cardinality(cardinality) => todo!(),
+            // GValue::Merge(merge) => todo!(),
+            // GValue::Direction(direction) => todo!(),
+            // GValue::Column(column) => todo!(),
+            _ => unimplemented!("TODO"),
+        }
+    }
+}
+
+impl GraphBinaryV1Ser for &str {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         let length: i32 = self
             .len()
             .try_into()
             .map_err(|_| GremlinError::Cast(format!("String length exceeds i32")))?;
-        GraphBinaryV1Serde::to_be_bytes(length, buf)?;
+        GraphBinaryV1Ser::to_be_bytes(length, buf)?;
         buf.extend_from_slice(self.as_bytes());
         Ok(())
     }
-
-    // fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
-    //     let string_bytes_length: i32 = GraphBinaryV1Serde::from_be_bytes(bytes)
-    //         .map_err((|_| GremlinError::Cast(format!("Invalid bytes for string length"))))?;
-    //     let string_bytes_length = string_bytes_length
-    //         .try_into()
-    //         .map_err((|_| GremlinError::Cast(format!("String length did not fit into usize"))))?;
-    //     let string_value_bytes: Vec<u8> = bytes.take(string_bytes_length).cloned().collect();
-    //     if string_value_bytes.len() < string_bytes_length {
-    //         return Err(GremlinError::Cast(format!(
-    //             "Missing bytes for string value"
-    //         )));
-    //     }
-    //     String::from_utf8(string_value_bytes)
-    //         .map_err((|_| GremlinError::Cast(format!("Invalid bytes for string value"))))
-    // }
 }
 
-impl GraphBinaryV1Serde for i32 {
+impl GraphBinaryV1Deser for String {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        let string_bytes_length: i32 = GraphBinaryV1Deser::from_be_bytes(bytes)
+            .map_err(|_| GremlinError::Cast(format!("Invalid bytes for String length")))?;
+        let string_bytes_length = string_bytes_length
+            .try_into()
+            .map_err(|_| GremlinError::Cast(format!("String length did not fit into usize")))?;
+        let string_value_bytes: Vec<u8> = bytes.take(string_bytes_length).cloned().collect();
+        if string_value_bytes.len() < string_bytes_length {
+            return Err(GremlinError::Cast(format!(
+                "Missing bytes for String value"
+            )));
+        }
+        String::from_utf8(string_value_bytes)
+            .map_err(|_| GremlinError::Cast(format!("Invalid bytes for String value")))
+    }
+}
+
+impl GraphBinaryV1Ser for i32 {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         buf.extend_from_slice(&self.to_be_bytes());
         Ok(())
     }
-
-    // fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
-    //     bytes
-    //         .take(4)
-    //         .cloned()
-    //         .collect::<Vec<u8>>()
-    //         .try_into()
-    //         .map_err(|_| GremlinError::Cast(format!("Invalid bytes into i32")))
-    //         .map(i32::from_be_bytes)
-    // }
 }
 
-impl GraphBinaryV1Serde for Uuid {
+impl GraphBinaryV1Deser for i32 {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        bytes
+            .take(4)
+            .cloned()
+            .collect::<Vec<u8>>()
+            .try_into()
+            .map_err(|_| GremlinError::Cast(format!("Invalid bytes into i32")))
+            .map(i32::from_be_bytes)
+    }
+}
+
+impl GraphBinaryV1Ser for Uuid {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         buf.extend_from_slice(self.as_bytes().as_slice());
         Ok(())
     }
-
-    // fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
-    //     bytes
-    //     .take(16)
-    //     .cloned()
-    //     .collect::<Vec<u8>>()
-    //     .try_into()
-    //     .map_err(|_| GremlinError::Cast(format!("Invalid bytes into Uuid")))
-    //     .map(Uuid::from_bytes)
-    // }
 }
 
-// fn deserialize_i32(bytes: &[u8]) -> GremlinResult<i32> {
-//     bytes
-//         .try_into()
-//         .map(i32::from_be_bytes)
-//         .map_err(|_| GremlinError::Cast(format!("Invalid bytes into i32")))
-// }
-
-// fn serialize_i32(value: i32) -> [u8; 4] {
-//     value.to_be_bytes()
-// }
+impl GraphBinaryV1Deser for Uuid {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        bytes
+            .take(16)
+            .cloned()
+            .collect::<Vec<u8>>()
+            .try_into()
+            .map_err(|_| GremlinError::Cast(format!("Invalid bytes into Uuid")))
+            .map(Uuid::from_bytes)
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
 
     use super::*;
-
-    // All encodings are big-endian.
-
-    // Quick examples, using hexadecimal notation to represent each byte:
-
-    //     01 00 00 00 00 01: a 32-bit integer number, that represents the decimal number 1. It’s composed by the type_code 0x01, and empty flag value 0x00 and four bytes to describe the value.
-
-    //     01 00 00 00 00 ff: a 32-bit integer, representing the number 256.
-
-    //     01 01: a null value for a 32-bit integer. It’s composed by the type_code 0x01, and a null flag value 0x01.
-
-    //     02 00 00 00 00 00 00 00 00 01: a 64-bit integer number 1. It’s composed by the type_code 0x02, empty flags and eight bytes to describe the value.
-
-    //Seems like generalized flow should be, be given a slice:
-    //Read the first byte
-    //then match on it
-
-    // {type_code}{type_info}{value_flag}{value}
-
-    // {type_code} is a single unsigned byte representing the type number.
-
-    // {type_info} is an optional sequence of bytes providing additional information of the type represented. This is specially useful for representing complex and custom types.
-
-    // {value_flag} is a single byte providing information about the value. Flags have the following meaning:
-
-    //     0x01 The value is null. When this flag is set, no bytes for {value} will be provided.
-
-    // {value} is a sequence of bytes which content is determined by the type.
 
     #[rstest]
     //Non-Null i32 Integer (01 00)
@@ -467,13 +437,15 @@ mod tests {
             .to_be_bytes(&mut serialized)
             .expect("Shouldn't fail parsing");
         assert_eq!(serialized, expected_serialized);
-        let deserialized = deserialize(serialized.iter()).expect("Shouldn't fail parsing");
+        let deserialized: GValue = GraphBinaryV1Deser::from_be_bytes(&mut serialized.iter())
+            .expect("Shouldn't fail parsing");
         assert_eq!(deserialized, expected);
     }
 
     #[rstest]
     #[case::too_few_bytes( &[0x01, 0x00, 0x00, 0x00, 0x00])]
     fn serde_int32_invalid_bytes(#[case] bytes: &[u8]) {
-        deserialize(bytes.iter()).expect_err("Should have failed due invalid bytes");
+        <GValue as GraphBinaryV1Deser>::from_be_bytes(&mut bytes.iter())
+            .expect_err("Should have failed due invalid bytes");
     }
 }

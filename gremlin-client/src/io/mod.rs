@@ -6,16 +6,15 @@ mod serializer_v3;
 
 use crate::conversion::ToGValue;
 use crate::message::{RequestIdV2, Response};
-use crate::process::traversal::{Bytecode, Order, Scope};
+use crate::process::traversal::{Order, Scope};
 use crate::structure::{Cardinality, Direction, GValue, Merge, T};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::f64::consts::E;
 use std::string::ToString;
 use uuid::Uuid;
 
-use crate::{io::graph_binary_v1::GraphBinaryV1Serde, GKey, GremlinError, GremlinResult, Message};
+use crate::{io::graph_binary_v1::GraphBinaryV1Ser, GKey, GremlinError, GremlinResult, Message};
 
 #[derive(Debug, Clone)]
 pub enum IoProtocol {
@@ -86,29 +85,13 @@ impl IoProtocol {
             }
             IoProtocol::GraphBinaryV1 => {
                 let mut message_bytes: Vec<u8> = Vec::new();
-                //Need to write header first, its length is a Byte not a Int
-                let header = String::from(content_type);
-                let header_length: u8 = header
-                    .len()
-                    .try_into()
-                    .expect("Header length should fit in u8");
-                message_bytes.push(header_length);
-                message_bytes.extend_from_slice(header.as_bytes());
-
-                //Version byte
-                message_bytes.push(0x81);
-
-                //Request Id
-                request_id.to_be_bytes(&mut message_bytes)?;
-
-                //Op
-                op.to_be_bytes(&mut message_bytes)?;
-
-                //Processor
-                processor.to_be_bytes(&mut message_bytes)?;
-
-                //Args
-                args.to_be_bytes(&mut message_bytes)?;
+                graph_binary_v1::RequestMessage {
+                    request_id,
+                    op,
+                    processor,
+                    args,
+                }
+                .to_be_bytes(&mut message_bytes)?;
                 message_bytes
             }
         };

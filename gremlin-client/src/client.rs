@@ -1,7 +1,5 @@
 use crate::io::IoProtocol;
-use crate::message::{
-    message_with_args, message_with_args_and_uuid, message_with_args_v2, Message, Response,
-};
+use crate::message::Response;
 use crate::pool::GremlinConnectionManager;
 use crate::process::traversal::Bytecode;
 use crate::ToGValue;
@@ -9,7 +7,6 @@ use crate::{ConnectionOptions, GremlinError, GremlinResult};
 use crate::{GResultSet, GValue};
 use base64::encode;
 use r2d2::Pool;
-use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 
 type SessionedClient = GremlinClient;

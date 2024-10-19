@@ -3,9 +3,7 @@ use r2d2::ManageConnection;
 use crate::connection::Connection;
 use crate::connection::ConnectionOptions;
 use crate::error::GremlinError;
-use crate::message::{
-    message_with_args, message_with_args_and_uuid, message_with_args_v2, Response,
-};
+use crate::message::Response;
 use crate::{GValue, GremlinResult, IoProtocol};
 use base64::encode;
 use std::collections::HashMap;

@@ -78,45 +78,6 @@ where
     Option::<T>::deserialize(de).map(Option::unwrap_or_default)
 }
 
-pub fn message_with_args_v2<T>(op: String, processor: String, args: T) -> Message<T> {
-    message_with_args_and_uuid_v2(op, processor, Uuid::new_v4(), args)
-}
-
-pub fn message_with_args_and_uuid_v2<T>(
-    op: String,
-    processor: String,
-    id: Uuid,
-    args: T,
-) -> Message<T> {
-    Message::V2 {
-        request_id: RequestIdV2 {
-            id_type: "g:UUID".to_string(),
-            value: id,
-        },
-        op,
-        processor,
-        args,
-    }
-}
-
-pub fn message_with_args<T>(op: String, processor: String, args: T) -> Message<T> {
-    message_with_args_and_uuid(op, processor, Uuid::new_v4(), args)
-}
-
-pub fn message_with_args_and_uuid<T>(
-    op: String,
-    processor: String,
-    id: Uuid,
-    args: T,
-) -> Message<T> {
-    Message::V3 {
-        request_id: id,
-        op,
-        processor,
-        args,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::message::ReponseStatus;

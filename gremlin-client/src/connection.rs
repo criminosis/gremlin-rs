@@ -1,4 +1,4 @@
-use std::{net::TcpStream, sync::Arc, time::Duration};
+use std::{net::TcpStream, time::Duration};
 
 use crate::{GremlinError, GremlinResult, IoProtocol};
 use native_tls::TlsConnector;
