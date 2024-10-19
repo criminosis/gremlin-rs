@@ -6,7 +6,7 @@ use crate::error::GremlinError;
 use crate::message::{
     message_with_args, message_with_args_and_uuid, message_with_args_v2, Response,
 };
-use crate::{GValue, IoProtocol, GremlinResult};
+use crate::{GValue, GremlinResult, IoProtocol};
 use base64::encode;
 use std::collections::HashMap;
 
@@ -40,8 +40,11 @@ impl ManageConnection for GremlinConnectionManager {
             String::from("language"),
             GValue::String(String::from("gremlin-groovy")),
         );
-        
-        let (_, message) = self.options.serializer.build_message("eval", "", args, None)?;
+
+        let (_, message) = self
+            .options
+            .serializer
+            .build_message("eval", "", args, None)?;
         conn.send(message)?;
 
         let result = conn.recv()?;
@@ -59,7 +62,12 @@ impl ManageConnection for GremlinConnectionManager {
                         GValue::String(encode(&format!("\0{}\0{}", c.username, c.password))),
                     );
 
-                    let (_, message)= self.options.serializer.build_message("authentication", "traversal", args, Some(response.request_id))?;
+                    let (_, message) = self.options.serializer.build_message(
+                        "authentication",
+                        "traversal",
+                        args,
+                        Some(response.request_id),
+                    )?;
                     conn.send(message)?;
 
                     let result = conn.recv()?;

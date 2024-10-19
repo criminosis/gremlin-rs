@@ -41,7 +41,10 @@ impl Manager for GremlinConnectionManager {
             GValue::String(String::from("gremlin-groovy")),
         );
 
-        let (id, message) = self.options.serializer.build_message("eval", "", args, None)?;
+        let (id, message) = self
+            .options
+            .serializer
+            .build_message("eval", "", args, None)?;
 
         let (response, _receiver) = conn.send(id, binary).await?;
 
@@ -57,7 +60,12 @@ impl Manager for GremlinConnectionManager {
                         GValue::String(encode(&format!("\0{}\0{}", c.username, c.password))),
                     );
 
-                    let (id, message) = self.options.serializer.build_message("authentication", "traversal", args, Some(response.request_id))?;
+                    let (id, message) = self.options.serializer.build_message(
+                        "authentication",
+                        "traversal",
+                        args,
+                        Some(response.request_id),
+                    )?;
                     let (response, _receiver) = conn.send(id, message).await?;
                     match response.status.code {
                         200 | 206 => Ok(conn),

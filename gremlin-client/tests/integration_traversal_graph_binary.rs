@@ -1,5 +1,8 @@
 use common::io::graph_serializer;
-use gremlin_client::{process::traversal::{traversal, Scope}, GValue, IoProtocol};
+use gremlin_client::{
+    process::traversal::{traversal, Scope},
+    GValue, IoProtocol,
+};
 
 mod common;
 

@@ -45,7 +45,13 @@ impl IoProtocol {
         }
     }
 
-    pub fn build_message(&self, op: &str, processor: &str, args: HashMap<String, GValue>, request_id: Option<Uuid>) -> GremlinResult<(Uuid, Vec<u8>)> {
+    pub fn build_message(
+        &self,
+        op: &str,
+        processor: &str,
+        args: HashMap<String, GValue>,
+        request_id: Option<Uuid>,
+    ) -> GremlinResult<(Uuid, Vec<u8>)> {
         let content_type = self.content_type();
         let request_id = request_id.unwrap_or_else(Uuid::new_v4);
         let message_bytes = match self {
@@ -137,11 +143,13 @@ impl IoProtocol {
                 "@value" : d.timestamp_millis()
             })),
             (IoProtocol::GraphSONV2, GValue::List(d)) => {
-                let elements: GremlinResult<Vec<Value>> = d.iter().map(|e| self.write_graphson(e)).collect();
+                let elements: GremlinResult<Vec<Value>> =
+                    d.iter().map(|e| self.write_graphson(e)).collect();
                 Ok(json!(elements?))
             }
             (IoProtocol::GraphSONV3, GValue::List(d)) => {
-                let elements: GremlinResult<Vec<Value>> = d.iter().map(|e| self.write_graphson(e)).collect();
+                let elements: GremlinResult<Vec<Value>> =
+                    d.iter().map(|e| self.write_graphson(e)).collect();
                 Ok(json!({
                     "@type" : "g:List",
                     "@value" : elements?

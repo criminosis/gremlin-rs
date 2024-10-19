@@ -11,7 +11,9 @@ pub fn assert_map_property(element_map: &Map, expected_key: &str, expected_value
 
 #[allow(dead_code)]
 pub mod io {
-    use gremlin_client::{ConnectionOptions, Edge, IoProtocol, GremlinClient, GremlinResult, Vertex};
+    use gremlin_client::{
+        ConnectionOptions, Edge, GremlinClient, GremlinResult, IoProtocol, Vertex,
+    };
 
     pub fn connect() -> GremlinResult<GremlinClient> {
         GremlinClient::connect(("localhost", 8182))
@@ -113,7 +115,7 @@ pub mod io {
 pub mod aio {
     use gremlin_client::aio::GremlinClient;
 
-    use gremlin_client::{ConnectionOptions, Edge, IoProtocol, GremlinResult, Vertex};
+    use gremlin_client::{ConnectionOptions, Edge, GremlinResult, IoProtocol, Vertex};
 
     #[cfg(feature = "async-std-runtime")]
     use async_std::prelude::*;

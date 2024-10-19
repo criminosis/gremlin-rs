@@ -216,10 +216,10 @@ impl GremlinClient {
 
         args.insert(String::from("aliases"), GValue::from(aliases));
 
-        let (id, message) = self
-            .options
-            .serializer
-            .build_message("bytecode", "traversal", args, None)?;
+        let (id, message) =
+            self.options
+                .serializer
+                .build_message("bytecode", "traversal", args, None)?;
 
         let conn = self.pool.get().await?;
 

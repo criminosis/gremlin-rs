@@ -1,7 +1,7 @@
 mod common;
 
 use gremlin_client::{
-    ConnectionOptions, IoProtocol, GremlinClient, GremlinError, List, TlsOptions, ToGValue,
+    ConnectionOptions, GremlinClient, GremlinError, IoProtocol, List, TlsOptions, ToGValue,
     TraversalExplanation, TraversalMetrics, VertexProperty,
 };
 use gremlin_client::{Edge, GKey, GValue, Map, Vertex, GID};

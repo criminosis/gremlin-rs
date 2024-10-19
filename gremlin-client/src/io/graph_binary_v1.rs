@@ -34,7 +34,7 @@ struct RequestV1 {
 
 fn write_usize_as_i32_be_bytes(val: usize, buf: &mut Vec<u8>) -> GremlinResult<()> {
     let val_i32 = TryInto::<i32>::try_into(val)
-    .map_err(|_| GremlinError::Cast(format!("Invalid usize bytes exceed i32")))?;
+        .map_err(|_| GremlinError::Cast(format!("Invalid usize bytes exceed i32")))?;
     GraphBinaryV1Serde::to_be_bytes(val_i32, buf)
 }
 
@@ -107,18 +107,24 @@ impl GraphBinaryV1Serde for &GValue {
                 buf.push(0x00);
                 //then value bytes
                 // {steps_length}{step_0}…​{step_n}{sources_length}{source_0}…​{source_n}
-                //{steps_length} is an Int value describing the amount of steps.    
+                //{steps_length} is an Int value describing the amount of steps.
                 //{step_i} is composed of {name}{values_length}{value_0}…​{value_n}, where:
                 //  {name} is a String.
                 //  {values_length} is an Int describing the amount values.
                 //  {value_i} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} describing the step argument.
 
-                fn write_instructions(instructions: &Vec<Instruction>, buf: &mut Vec<u8>) -> GremlinResult<()>{
+                fn write_instructions(
+                    instructions: &Vec<Instruction>,
+                    buf: &mut Vec<u8>,
+                ) -> GremlinResult<()> {
                     write_usize_as_i32_be_bytes(instructions.len(), buf)?;
                     for instruction in instructions {
                         GraphBinaryV1Serde::to_be_bytes(instruction.operator().as_str(), buf)?;
                         write_usize_as_i32_be_bytes(instruction.args().len(), buf)?;
-                        instruction.args().iter().try_for_each(|arg| arg.to_be_bytes(buf))?;
+                        instruction
+                            .args()
+                            .iter()
+                            .try_for_each(|arg| arg.to_be_bytes(buf))?;
                     }
                     Ok(())
                 }
@@ -134,15 +140,19 @@ impl GraphBinaryV1Serde for &GValue {
 
                 //Format: a fully qualified single String representing the enum value.
                 match scope {
-                    crate::process::traversal::Scope::Global => (&GValue::from(String::from("global"))).to_be_bytes(buf)?,
-                    crate::process::traversal::Scope::Local => (&GValue::from(String::from("local"))).to_be_bytes(buf)?,
+                    crate::process::traversal::Scope::Global => {
+                        (&GValue::from(String::from("global"))).to_be_bytes(buf)?
+                    }
+                    crate::process::traversal::Scope::Local => {
+                        (&GValue::from(String::from("local"))).to_be_bytes(buf)?
+                    }
                 }
             }
             // GValue::Order(order) => todo!(),
             // GValue::Bool(_) => todo!(),
             // GValue::TextP(text_p) => todo!(),
             // GValue::Pop(pop) => todo!(),
-    
+
             // GValue::Cardinality(cardinality) => todo!(),
             // GValue::Merge(merge) => todo!(),
             // GValue::Direction(direction) => todo!(),
@@ -328,7 +338,7 @@ pub trait GraphBinaryV1Serde: Sized {
     // fn to_fully_qualified_be_bytes(&self, buf: &mut Vec<u8>) -> GremlinResult<()>;
     // fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self>;
     // fn from_fully_qualified_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self>;
-    
+
     //TODO implement a to_fully_qualified_be_bytes method & from_fully_qualified_be_bytes instead of serialize/deserialize methods
     // maybe this doesn't make sense, since it would require us to peek the first byte anyways and then match to the that impl to seek over the byte again
 }
@@ -453,7 +463,9 @@ mod tests {
     #[case::empty_str(&[0x03, 0x00, 0x00, 0x00, 0x00, 0x00], GValue::String("".into()))]
     fn serde(#[case] expected_serialized: &[u8], #[case] expected: GValue) {
         let mut serialized = Vec::new();
-        (&expected).to_be_bytes(&mut serialized).expect("Shouldn't fail parsing");
+        (&expected)
+            .to_be_bytes(&mut serialized)
+            .expect("Shouldn't fail parsing");
         assert_eq!(serialized, expected_serialized);
         let deserialized = deserialize(serialized.iter()).expect("Shouldn't fail parsing");
         assert_eq!(deserialized, expected);

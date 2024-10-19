@@ -1,6 +1,6 @@
 use std::{net::TcpStream, sync::Arc, time::Duration};
 
-use crate::{IoProtocol, GremlinError, GremlinResult};
+use crate::{GremlinError, GremlinResult, IoProtocol};
 use native_tls::TlsConnector;
 use tungstenite::{
     client::{uri_mode, IntoClientRequest},
