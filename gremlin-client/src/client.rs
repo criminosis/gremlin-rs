@@ -179,15 +179,15 @@ impl GremlinClient {
         conn: &mut r2d2::PooledConnection<GremlinConnectionManager>,
     ) -> GremlinResult<(Response, VecDeque<GValue>)> {
         let result = conn.recv()?;
-        let response = self.options.deserializer.read_response(&result)?;
+        let response = self.options.deserializer.read_response(result)?;
 
         match response.status.code {
             200 | 206 => {
-                let results: VecDeque<GValue> = self
-                    .options
-                    .deserializer
-                    .read(&response.result.data)?
-                    .map(|v| v.into())
+                let results: VecDeque<GValue> = response
+                    .result
+                    .data
+                    .clone()
+                    .map(Into::into)
                     .unwrap_or_else(VecDeque::new);
 
                 Ok((response, results))

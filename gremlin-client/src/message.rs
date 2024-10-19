@@ -3,6 +3,8 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::GValue;
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestIdV2 {
@@ -49,17 +51,16 @@ impl<T> Message<T> {
         }
     }
 }
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 pub struct Response {
     pub request_id: Uuid,
     pub result: ResponseResult,
     pub status: ReponseStatus,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct ResponseResult {
-    pub data: Value,
+    pub data: Option<GValue>,
 }
 
 #[derive(Debug, Deserialize)]

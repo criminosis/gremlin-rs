@@ -46,7 +46,7 @@ impl ManageConnection for GremlinConnectionManager {
         conn.send(message)?;
 
         let result = conn.recv()?;
-        let response = self.options.deserializer.read_response(&result)?;
+        let response = self.options.deserializer.read_response(result)?;
 
         match response.status.code {
             200 | 206 => Ok(()),
@@ -69,7 +69,7 @@ impl ManageConnection for GremlinConnectionManager {
                     conn.send(message)?;
 
                     let result = conn.recv()?;
-                    let response = self.options.deserializer.read_response(&result)?;
+                    let response = self.options.deserializer.read_response(result)?;
 
                     match response.status.code {
                         200 | 206 => Ok(()),

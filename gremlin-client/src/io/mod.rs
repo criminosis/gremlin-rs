@@ -5,9 +5,12 @@ mod serializer_v2;
 mod serializer_v3;
 
 use crate::conversion::ToGValue;
-use crate::message::{RequestIdV2, Response};
+use crate::message::{ReponseStatus, RequestIdV2, Response, ResponseResult};
 use crate::process::traversal::{Order, Scope};
 use crate::structure::{Cardinality, Direction, GValue, Merge, T};
+use graph_binary_v1::GraphBinaryV1Deser;
+use serde::{Deserialize as SerdeDeserialize, Deserializer};
+use serde_derive::Deserialize;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -23,6 +26,21 @@ pub enum IoProtocol {
     GraphBinaryV1,
 }
 
+//TODO these should probably be moved into their modules
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MiddleResponse {
+    pub request_id: Uuid,
+    pub result: MiddleResponseResult,
+    pub status: ReponseStatus,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MiddleResponseResult {
+    pub data: Value,
+}
+
 impl IoProtocol {
     pub fn read(&self, value: &Value) -> GremlinResult<Option<GValue>> {
         if let Value::Null = value {
@@ -35,12 +53,34 @@ impl IoProtocol {
         }
     }
 
-    pub fn read_response(&self, response: &[u8]) -> GremlinResult<Response> {
+    pub fn read_response(&self, response: Vec<u8>) -> GremlinResult<Response> {
         match self {
-            IoProtocol::GraphSONV2 | IoProtocol::GraphSONV3 => {
-                serde_json::from_slice(&response).map_err(GremlinError::from)
+            IoProtocol::GraphSONV2 => {
+                let middle_form: MiddleResponse =
+                    serde_json::from_slice(&response).map_err(GremlinError::from)?;
+                Ok(Response {
+                    request_id: middle_form.request_id,
+                    result: ResponseResult {
+                        data: serializer_v2::deserializer_v2(&middle_form.result.data).map(Some)?,
+                    },
+                    status: middle_form.status,
+                })
             }
-            IoProtocol::GraphBinaryV1 => todo!(),
+            IoProtocol::GraphSONV3 => {
+                let middle_form: MiddleResponse =
+                    serde_json::from_slice(&response).map_err(GremlinError::from)?;
+                Ok(Response {
+                    request_id: middle_form.request_id,
+                    result: ResponseResult {
+                        data: serializer_v3::deserializer_v3(&middle_form.result.data).map(Some)?,
+                    },
+                    status: middle_form.status,
+                })
+            }
+            IoProtocol::GraphBinaryV1 => {
+                graph_binary_v1::ResponseMessage::from_be_bytes(&mut response.iter())
+                    .map(|middle| middle.into())
+            }
         }
     }
 

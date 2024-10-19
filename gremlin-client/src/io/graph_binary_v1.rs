@@ -1,19 +1,147 @@
-use std::{
-    collections::HashMap,
-    convert::TryInto,
-};
+use std::{collections::HashMap, convert::TryInto, iter};
 
+use tungstenite::http::request;
 use uuid::Uuid;
 
-use crate::{process::traversal::Instruction, GKey, GValue, GremlinError, GremlinResult};
+use crate::{
+    conversion::FromGValue,
+    io::graph_binary_v1,
+    message::{ReponseStatus, Response, ResponseResult},
+    process::traversal::Instruction,
+    structure::Traverser,
+    GKey, GValue, GremlinError, GremlinResult,
+};
 
 use super::IoProtocol;
+
+const VERSION_BYTE: u8 = 0x81;
+const VALUE_FLAG: u8 = 0x00;
+const VALUE_NULL_FLAG: u8 = 0x01;
+
+//Data codes (https://tinkerpop.apache.org/docs/3.7.2/dev/io/#_data_type_codes)
+const INTEGER: u8 = 0x01;
+const LONG: u8 = 0x02;
+const STRING: u8 = 0x03;
+//...
+const BYTECODE: u8 = 0x15;
+//...
+const SCOPE: u8 = 0x1F;
+//TODO fill in others
+const LIST: u8 = 0x09;
+const MAP: u8 = 0x0A;
+//...
+const TRAVERSER: u8 = 0x21;
+//...
+const UNSPECIFIED_NULL_OBEJECT: u8 = 0xFE;
 
 pub(crate) struct RequestMessage<'a, 'b> {
     pub(crate) request_id: Uuid,
     pub(crate) op: &'a str,
     pub(crate) processor: &'b str,
     pub(crate) args: HashMap<String, GValue>,
+}
+
+pub(crate) struct ResponseMessage {
+    //Format: {version}{request_id}{status_code}{status_message}{status_attributes}{result_meta}{result_data}
+    pub(crate) request_id: Uuid,
+    pub(crate) status_code: i16,
+    pub(crate) status_message: String,
+    pub(crate) status_attributes: HashMap<GKey, GValue>,
+    pub(crate) result_meta: HashMap<GKey, GValue>,
+    pub(crate) result_data: Option<GValue>,
+}
+
+impl Into<Response> for ResponseMessage {
+    fn into(self) -> Response {
+        let status = ReponseStatus {
+            code: self.status_code,
+            message: self.status_message,
+        };
+        Response {
+            request_id: self.request_id,
+            result: ResponseResult {
+                data: self.result_data,
+            },
+            status,
+        }
+    }
+}
+
+impl GraphBinaryV1Deser for ResponseMessage {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        if false {
+            //[
+            //version: 129,
+            //uuid w/ 0 value flag:  0, 149, 52, 143, 202, 41, 23, 76, 216, 157, 199, 182, 172, 1, 102, 41, 11,
+            //status: 0, 0, 0, 200,
+            //status_message just 0 int length: 0, 0, 0, 0,
+            //status_attributes, just 0 length map?: 0,
+            //result_meta, just 0 length map?: 0,
+            //result data:
+            //  0, 0, 1, 3, 0, 0, 0, 0, 4, 104, 111, 115, 116, 3, 0, 0, 0, 0, 16, 47, 49, 50, 55, 46, 48, 46, 48, 46, 49, 58, 53, 49, 57, 48, 54, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0]
+
+            //[129,
+            //0, 241, 233, 95, 30, 32, 43, 70, 30, 160, 140, 157, 252, 20, 108, 65, 238,
+            //status: 0, 0, 0, 200,
+            //status_message w/ 0 length: 0, 0, 0, 0,
+            //status attributes: 0, 0, 0, 0, 1, 3, 0, 0, 0, 0, 4, 104, 111, 115, 116, 3, 0, 0, 0, 0, 16, 47, 49, 50, 55, 46, 48, 46, 48, 46, 49, 58, 53, 49, 53, 56, 52, 0, 0, 0, 0,
+            //9, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0]
+            let vec: Vec<u8> = bytes.cloned().collect();
+            panic!("{:?}", vec);
+        }
+        //First confirm the version is as expected
+        let Some(&graph_binary_v1::VERSION_BYTE) = bytes.next() else {
+            return Err(GremlinError::Cast(format!("Invalid version byte")));
+        };
+
+        //Request id is nullable
+        let request_id =
+            Uuid::from_be_bytes_nullable(bytes)?.expect("TODO what to do with null request id?");
+
+        let status_code = <i32 as GraphBinaryV1Deser>::from_be_bytes(bytes)?
+            .try_into()
+            .expect("Status code should fit in i16");
+        //Status message is nullable
+        let status_message = String::from_be_bytes_nullable(bytes)?
+            .expect("TODO what to do with null status message");
+
+        fn deserialize_map<'a, S: Iterator<Item = &'a u8>>(
+            bytes: &mut S,
+        ) -> GremlinResult<HashMap<GKey, GValue>> {
+            //first will be the map length
+            let map_length = <i32 as GraphBinaryV1Deser>::from_be_bytes(bytes)?;
+            let mut map = HashMap::new();
+            //Then fully qualified entry of each k/v pair
+            for _ in 0..map_length {
+                let key: GKey = GKey::from_gvalue(GValue::from_be_bytes(bytes)?)
+                    .map_err(|_| GremlinError::Cast(format!("Invalid GKey bytes")))?;
+                let value = GValue::from_be_bytes(bytes)?;
+
+                map.insert(key, value);
+            }
+            Ok(map)
+        }
+
+        let status_attributes = deserialize_map(bytes)?;
+
+        //It seems like we're going off the rails here, probably need to do a binary dump comparison with the java client again
+
+        let result_meta = deserialize_map(bytes)?;
+        let result_data = GValue::from_be_bytes(bytes)?;
+        let result_data = if result_data == GValue::Null {
+            None
+        } else {
+            Some(result_data)
+        };
+        Ok(ResponseMessage {
+            request_id,
+            status_code,
+            status_message,
+            status_attributes,
+            result_meta,
+            result_data,
+        })
+    }
 }
 
 impl<'a, 'b> GraphBinaryV1Ser for RequestMessage<'a, 'b> {
@@ -27,8 +155,8 @@ impl<'a, 'b> GraphBinaryV1Ser for RequestMessage<'a, 'b> {
         buf.push(header_length);
         buf.extend_from_slice(header.as_bytes());
 
-        //Version byte is 0x81 for this version
-        buf.push(0x81);
+        //Version byte first
+        buf.push(VERSION_BYTE);
 
         //Request Id
         self.request_id.to_be_bytes(buf)?;
@@ -82,9 +210,9 @@ impl GraphBinaryV1Ser for &GValue {
         match self {
             GValue::Null => {
                 //Type code of 0xfe: Unspecified null object
-                buf.push(0xfe);
+                buf.push(UNSPECIFIED_NULL_OBEJECT);
                 //Then the null {value_flag} set and no sequence of bytes.
-                buf.push(0x01);
+                buf.push(VALUE_NULL_FLAG);
             }
             // GValue::Vertex(vertex) => todo!(),
             // GValue::Edge(edge) => todo!(),
@@ -93,9 +221,9 @@ impl GraphBinaryV1Ser for &GValue {
             // GValue::Uuid(uuid) => todo!(),
             GValue::Int32(value) => {
                 //Type code of 0x01
-                buf.push(0x01);
+                buf.push(INTEGER);
                 //Empty value flag
-                buf.push(0x00);
+                buf.push(VALUE_FLAG);
                 //then value bytes
                 GraphBinaryV1Ser::to_be_bytes(*value, buf)?;
             }
@@ -107,9 +235,9 @@ impl GraphBinaryV1Ser for &GValue {
             // GValue::Set(set) => todo!(),
             GValue::Map(map) => {
                 //Type code of 0x0a: Map
-                buf.push(0x0a);
+                buf.push(MAP);
                 // //Empty value flag
-                buf.push(0x00);
+                buf.push(VALUE_FLAG);
 
                 //{length} is an Int describing the length of the map.
                 write_usize_as_i32_be_bytes(map.len(), buf)?;
@@ -124,9 +252,9 @@ impl GraphBinaryV1Ser for &GValue {
             // GValue::Token(token) => todo!(),
             GValue::String(value) => {
                 //Type code of 0x03: String
-                buf.push(0x03);
+                buf.push(STRING);
                 //Empty value flag
-                buf.push(0x00);
+                buf.push(VALUE_FLAG);
                 //Format: {length}{text_value}
                 // {length} is an Int describing the byte length of the text. Length is a positive number or zero to represent the empty string.
                 // {text_value} is a sequence of bytes representing the string value in UTF8 encoding.
@@ -141,9 +269,9 @@ impl GraphBinaryV1Ser for &GValue {
             // GValue::T(t) => todo!(),
             GValue::Bytecode(code) => {
                 //Type code of 0x15: Bytecode
-                buf.push(0x15);
+                buf.push(BYTECODE);
                 //Empty value flag
-                buf.push(0x00);
+                buf.push(VALUE_FLAG);
                 //then value bytes
                 // {steps_length}{step_0}…​{step_n}{sources_length}{source_0}…​{source_n}
                 //{steps_length} is an Int value describing the amount of steps.
@@ -173,9 +301,9 @@ impl GraphBinaryV1Ser for &GValue {
             // GValue::Traverser(traverser) => todo!(),
             GValue::Scope(scope) => {
                 //Type code of 0x1f: Scope
-                buf.push(0x1f);
+                buf.push(SCOPE);
                 //Empty value flag
-                buf.push(0x00);
+                buf.push(VALUE_FLAG);
 
                 //Format: a fully qualified single String representing the enum value.
                 match scope {
@@ -220,6 +348,20 @@ pub trait GraphBinaryV1Ser: Sized {
 
 pub trait GraphBinaryV1Deser: Sized {
     fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self>;
+
+    fn from_be_bytes_nullable<'a, S: Iterator<Item = &'a u8>>(
+        bytes: &mut S,
+    ) -> GremlinResult<Option<Self>> {
+        match bytes.next().cloned() {
+            Some(VALUE_FLAG) => Self::from_be_bytes(bytes).map(Option::Some),
+            Some(VALUE_NULL_FLAG) => Ok(None),
+            other => {
+                return Err(GremlinError::Cast(format!(
+                    "Unexpected byte for nullable check: {other:?}"
+                )))
+            }
+        }
+    }
 }
 
 impl GraphBinaryV1Deser for GValue {
@@ -227,7 +369,7 @@ impl GraphBinaryV1Deser for GValue {
         let data_code = bytes
             .next()
             .ok_or_else(|| GremlinError::Cast(format!("Invalid bytes no data code byte")))?;
-        match data_code {
+        match *data_code {
             // GValue::Null => {
             //     buf.reserve_exact(2);
             //     //Type code of 0xfe: Unspecified null object
@@ -240,17 +382,12 @@ impl GraphBinaryV1Deser for GValue {
             // GValue::VertexProperty(vertex_property) => todo!(),
             // GValue::Property(property) => todo!(),
             // GValue::Uuid(uuid) => todo!(),
-            0x01 => {
+            INTEGER => {
                 //Type code of 0x01: Integer
-                //Check null flag
-                match bytes.next() {
-                    Some(0x00) => {
-                        //We've got a value to parse
-                        GraphBinaryV1Deser::from_be_bytes(bytes).map(GValue::Int32)
-                    }
-                    Some(0x01) => Ok(GValue::Null),
-                    _ => Err(GremlinError::Cast(format!("Invalid bytes into i32"))),
-                }
+                Ok(match i32::from_be_bytes_nullable(bytes)? {
+                    Some(value) => GValue::Int32(value),
+                    None => GValue::Null,
+                })
             }
             // GValue::Int64(_) => todo!(),
             // GValue::Float(_) => todo!(),
@@ -260,23 +397,12 @@ impl GraphBinaryV1Deser for GValue {
             // GValue::Set(set) => todo!(),
             // GValue::Map(map) => todo!(),
             // GValue::Token(token) => todo!(),
-            0x03 => {
+            STRING => {
                 //Type code of 0x03: String
-                match bytes.next() {
-                    Some(0x00) => {
-                        //We've got a value to parse
-                        GraphBinaryV1Deser::from_be_bytes(bytes).map(GValue::String)
-                    }
-                    Some(0x01) => Ok(GValue::Null),
-                    _ => Err(GremlinError::Cast(format!("Invalid bytes into String"))),
-                }
-
-                // GValue::String(value) => {
-                //
-                //     //Empty value flag
-                //     //Format: {length}{text_value}
-                //     // {length} is an Int describing the byte length of the text. Length is a positive number or zero to represent the empty string.
-                //     // {text_value} is a sequence of bytes representing the string value in UTF8 encoding.
+                Ok(match String::from_be_bytes_nullable(bytes)? {
+                    Some(string) => GValue::String(string),
+                    None => GValue::Null,
+                })
             }
             // GValue::Path(path) => todo!(),
             // GValue::TraversalMetrics(traversal_metrics) => todo!(),
@@ -341,7 +467,21 @@ impl GraphBinaryV1Deser for GValue {
             // GValue::Merge(merge) => todo!(),
             // GValue::Direction(direction) => todo!(),
             // GValue::Column(column) => todo!(),
-            _ => unimplemented!("TODO"),
+            LIST => {
+                let deserialized_list: Option<Vec<GValue>> =
+                    GraphBinaryV1Deser::from_be_bytes_nullable(bytes)?;
+                Ok(deserialized_list
+                    .map(|val| GValue::List(val.into()))
+                    .unwrap_or(GValue::Null))
+            }
+            TRAVERSER => {
+                let traverser: Option<Traverser> =
+                    GraphBinaryV1Deser::from_be_bytes_nullable(bytes)?;
+                Ok(traverser
+                    .map(|val| GValue::Traverser(val))
+                    .unwrap_or(GValue::Null))
+            }
+            other => unimplemented!("TODO {other}"),
         }
     }
 }
@@ -355,6 +495,29 @@ impl GraphBinaryV1Ser for &str {
         GraphBinaryV1Ser::to_be_bytes(length, buf)?;
         buf.extend_from_slice(self.as_bytes());
         Ok(())
+    }
+}
+
+impl GraphBinaryV1Deser for Traverser {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        Ok(Traverser::new(
+            GraphBinaryV1Deser::from_be_bytes(bytes)?,
+            GraphBinaryV1Deser::from_be_bytes(bytes)?,
+        ))
+    }
+}
+
+impl GraphBinaryV1Deser for Vec<GValue> {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        let length = <i32 as GraphBinaryV1Deser>::from_be_bytes(bytes)?
+            .try_into()
+            .map_err(|_| GremlinError::Cast(format!("list length exceeds usize")))?;
+        let mut list = Vec::new();
+        list.reserve_exact(length);
+        for _ in 0..length {
+            list.push(GValue::from_be_bytes(bytes)?);
+        }
+        Ok(list)
     }
 }
 
@@ -392,6 +555,18 @@ impl GraphBinaryV1Deser for i32 {
             .try_into()
             .map_err(|_| GremlinError::Cast(format!("Invalid bytes into i32")))
             .map(i32::from_be_bytes)
+    }
+}
+
+impl GraphBinaryV1Deser for i64 {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        bytes
+            .take(8)
+            .cloned()
+            .collect::<Vec<u8>>()
+            .try_into()
+            .map_err(|_| GremlinError::Cast(format!("Invalid bytes into i64")))
+            .map(i64::from_be_bytes)
     }
 }
 
