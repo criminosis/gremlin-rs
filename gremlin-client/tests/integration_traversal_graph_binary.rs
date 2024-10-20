@@ -10,5 +10,5 @@ mod common;
 fn demo() {
     let g = traversal().with_remote(graph_serializer(IoProtocol::GraphBinaryV1));
     let y = g.inject(1).sum(Scope::Global).next().unwrap();
-    panic!("Got {:?}", y);
+    assert_eq!(y, Some(GValue::Int64(1)))
 }

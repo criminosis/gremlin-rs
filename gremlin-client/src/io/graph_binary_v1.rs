@@ -389,6 +389,12 @@ impl GraphBinaryV1Deser for GValue {
                     None => GValue::Null,
                 })
             }
+            LONG => {
+                Ok(match i64::from_be_bytes_nullable(bytes)? {
+                    Some(value) => GValue::Int64(value),
+                    None => GValue::Null,
+                })
+            }
             // GValue::Int64(_) => todo!(),
             // GValue::Float(_) => todo!(),
             // GValue::Double(_) => todo!(),
