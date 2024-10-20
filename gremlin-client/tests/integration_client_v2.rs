@@ -36,6 +36,7 @@ fn test_ok_credentials_v2() {
                 accept_invalid_certs: true,
             })
             .serializer(IoProtocol::GraphSONV2)
+            .deserializer(IoProtocol::GraphSONV2)
             .build(),
     )
     .expect("Cannot connect");
