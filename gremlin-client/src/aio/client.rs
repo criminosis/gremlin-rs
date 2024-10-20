@@ -1,9 +1,5 @@
 use crate::aio::pool::GremlinConnectionManager;
 use crate::aio::GResultSet;
-use crate::io::IoProtocol;
-use crate::message::{
-    message_with_args, message_with_args_and_uuid, message_with_args_v2, Message,
-};
 use crate::process::traversal::Bytecode;
 use crate::GValue;
 use crate::ToGValue;
@@ -11,7 +7,6 @@ use crate::{ConnectionOptions, GremlinError, GremlinResult};
 use base64::encode;
 use futures::future::{BoxFuture, FutureExt};
 use mobc::{Connection, Pool};
-use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
 
@@ -144,7 +139,7 @@ impl GremlinClient {
         self.send_message_new(conn, id, message).await
     }
 
-    pub(crate) fn send_message_new<'a, T: Serialize>(
+    pub(crate) fn send_message_new<'a>(
         &'a self,
         mut conn: Connection<GremlinConnectionManager>,
         id: Uuid,
@@ -155,11 +150,11 @@ impl GremlinClient {
 
             let (response, results) = match response.status.code {
                 200 | 206 => {
-                    let results: VecDeque<GValue> = self
-                        .options
-                        .deserializer
-                        .read(&response.result.data)?
-                        .map(|v| v.into())
+                    let results: VecDeque<GValue> = response
+                        .result
+                        .data
+                        .clone()
+                        .map(Into::into)
                         .unwrap_or_else(VecDeque::new);
                     Ok((response, results))
                 }

@@ -3,8 +3,7 @@ use mobc::Manager;
 use crate::aio::connection::Conn;
 use crate::connection::ConnectionOptions;
 use crate::error::GremlinError;
-use crate::message::{message_with_args, message_with_args_and_uuid, message_with_args_v2};
-use crate::{GValue, IoProtocol};
+use crate::GValue;
 use async_trait::async_trait;
 use base64::encode;
 use std::collections::HashMap;
@@ -46,7 +45,7 @@ impl Manager for GremlinConnectionManager {
             .serializer
             .build_message("eval", "", args, None)?;
 
-        let (response, _receiver) = conn.send(id, binary).await?;
+        let (response, _receiver) = conn.send(id, message).await?;
 
         match response.status.code {
             200 | 206 => Ok(conn),
