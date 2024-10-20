@@ -26,8 +26,6 @@ pub enum IoProtocol {
     GraphBinaryV1,
 }
 
-//TODO these should probably be moved into their modules
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MiddleResponse {
