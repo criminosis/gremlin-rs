@@ -145,11 +145,25 @@ pub enum GKey {
     Vertex(Vertex),
     Edge(Edge),
     Direction(Direction),
+    Int64(i64),
+    Int32(i32),
 }
 
 impl From<T> for GKey {
     fn from(val: T) -> Self {
         GKey::T(val)
+    }
+}
+
+impl From<i64> for GKey {
+    fn from(value: i64) -> Self {
+        GKey::Int64(value)
+    }
+}
+
+impl From<i32> for GKey {
+    fn from(value: i32) -> Self {
+        GKey::Int32(value)
     }
 }
 

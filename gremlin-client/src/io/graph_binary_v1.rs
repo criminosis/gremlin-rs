@@ -9,8 +9,8 @@ use crate::{
     io::graph_binary_v1,
     message::{ReponseStatus, Response, ResponseResult},
     process::traversal::Instruction,
-    structure::Traverser,
-    GKey, GValue, GremlinError, GremlinResult,
+    structure::{Traverser, T},
+    GKey, GValue, GremlinError, GremlinResult, Vertex, GID,
 };
 
 use super::IoProtocol;
@@ -46,7 +46,10 @@ const SCOPE: u8 = 0x1F;
 //TODO fill in others
 
 //...
+const T: u8 = 0x20;
 const TRAVERSER: u8 = 0x21;
+//...
+const BOOLEAN: u8 = 0x27;
 //...
 const UNSPECIFIED_NULL_OBEJECT: u8 = 0xFE;
 
@@ -335,6 +338,11 @@ impl GraphBinaryV1Ser for &GValue {
                     }
                 }
             }
+            GValue::Bool(bool) => {
+                buf.push(BOOLEAN);
+                buf.push(VALUE_FLAG);
+                bool.to_be_bytes(buf)?;
+            }
             other => unimplemented!("TODO {other:?}"),
         }
         Ok(())
@@ -350,6 +358,8 @@ impl GraphBinaryV1Ser for &GKey {
             GKey::Vertex(vertex) => todo!(),
             GKey::Edge(edge) => todo!(),
             GKey::Direction(direction) => todo!(),
+            GKey::Int64(_) => todo!(),
+            GKey::Int32(_) => todo!(),
         }
     }
 }
@@ -371,6 +381,27 @@ pub trait GraphBinaryV1Deser: Sized {
                     "Unexpected byte for nullable check: {other:?}"
                 )))
             }
+        }
+    }
+}
+
+impl GraphBinaryV1Ser for bool {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        //Format: A single byte containing the value 0x01 when it’s true and 0 otherwise.
+        match self {
+            true => buf.push(0x01),
+            false => buf.push(0x00),
+        }
+        Ok(())
+    }
+}
+
+impl GraphBinaryV1Deser for bool {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        match bytes.next() {
+            Some(0x00) => Ok(false),
+            Some(0x01) => Ok(true),
+            other => Err(GremlinError::Cast(format!("No boolean value byte {other:?}"))),
         }
     }
 }
@@ -442,6 +473,14 @@ impl GraphBinaryV1Deser for GValue {
             PROPERTY => {
                 todo!()
             }
+            VERTEX => Ok(match Vertex::from_be_bytes_nullable(bytes)? {
+                Some(value) => GValue::Vertex(value),
+                None => GValue::Null,
+            }),
+            T => Ok(match T::from_be_bytes_nullable(bytes)? {
+                Some(value) => GValue::T(value),
+                None => GValue::Null,
+            }),
             TRAVERSER => {
                 let traverser: Option<Traverser> =
                     GraphBinaryV1Deser::from_be_bytes_nullable(bytes)?;
@@ -449,7 +488,47 @@ impl GraphBinaryV1Deser for GValue {
                     .map(|val| GValue::Traverser(val))
                     .unwrap_or(GValue::Null))
             }
+            UNSPECIFIED_NULL_OBEJECT => {
+                //Need to confirm the null-ness with the next byte being a 1
+                match bytes.next().cloned() {
+                    Some(VALUE_NULL_FLAG) => Ok(GValue::Null),
+                    other => Err(GremlinError::Cast(format!("Not expected null value byte {other:?}"))),
+                }
+            }
             other => unimplemented!("TODO {other}"),
+        }
+    }
+}
+
+impl GraphBinaryV1Deser for T {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        let literal = GValue::from_be_bytes_nullable(bytes)?;
+        match literal {
+            Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("id") => Ok(T::Id),
+            Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("key") => Ok(T::Id),
+            Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("label") => Ok(T::Id),
+            Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("value") => Ok(T::Id),
+            other => Err(GremlinError::Cast(format!("Unexpected T literal {other:?}"))),
+        }
+    }
+}
+
+impl GraphBinaryV1Deser for Vertex {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        //Format: {id}{label}{properties}
+        //{id} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
+        let id: GValue = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+        //{label} is a String value.
+        let label: String = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+        //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains properties.
+        //Note that as TinkerPop currently send "references" only, this value will always be null.
+        //properties: HashMap<String, Vec<VertexProperty>>,
+        let properties: GValue = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+        if properties == GValue::Null {
+            //TODO How do vertices get properties then?
+            Ok(Vertex::new(id.try_into()?, label, HashMap::new()))
+        } else {
+            panic!("Remainder: {:?}", properties);
         }
     }
 }

@@ -71,6 +71,8 @@ version = "1.1.2"
 
 [dev-dependencies]
 rstest = "0.23.0"
+rstest_reuse = "0.7.0"
+serial_test = "3.1.1"
 
 [[example]]
 name = "traversal_async"
