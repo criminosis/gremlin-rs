@@ -1,5 +1,5 @@
 use std::array::IntoIter;
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, TimeZone, Utc};
 use common::io::graph_serializer;
@@ -10,8 +10,8 @@ use gremlin_client::{
     GValue, IoProtocol,
 };
 use rstest::rstest;
-use uuid::Uuid;
 use std::iter::FromIterator;
+use uuid::Uuid;
 
 mod common;
 

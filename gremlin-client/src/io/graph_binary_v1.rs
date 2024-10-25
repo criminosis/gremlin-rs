@@ -401,7 +401,9 @@ impl GraphBinaryV1Deser for bool {
         match bytes.next() {
             Some(0x00) => Ok(false),
             Some(0x01) => Ok(true),
-            other => Err(GremlinError::Cast(format!("No boolean value byte {other:?}"))),
+            other => Err(GremlinError::Cast(format!(
+                "No boolean value byte {other:?}"
+            ))),
         }
     }
 }
@@ -492,7 +494,9 @@ impl GraphBinaryV1Deser for GValue {
                 //Need to confirm the null-ness with the next byte being a 1
                 match bytes.next().cloned() {
                     Some(VALUE_NULL_FLAG) => Ok(GValue::Null),
-                    other => Err(GremlinError::Cast(format!("Not expected null value byte {other:?}"))),
+                    other => Err(GremlinError::Cast(format!(
+                        "Not expected null value byte {other:?}"
+                    ))),
                 }
             }
             other => unimplemented!("TODO {other}"),
@@ -508,7 +512,9 @@ impl GraphBinaryV1Deser for T {
             Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("key") => Ok(T::Id),
             Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("label") => Ok(T::Id),
             Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("value") => Ok(T::Id),
-            other => Err(GremlinError::Cast(format!("Unexpected T literal {other:?}"))),
+            other => Err(GremlinError::Cast(format!(
+                "Unexpected T literal {other:?}"
+            ))),
         }
     }
 }

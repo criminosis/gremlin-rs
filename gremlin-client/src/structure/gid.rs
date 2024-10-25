@@ -41,7 +41,9 @@ impl TryFrom<GValue> for GID {
             GValue::Int32(v) => Ok(GID::Int32(v)),
             GValue::Int64(v) => Ok(GID::Int64(v)),
             GValue::String(v) => Ok(GID::String(v)),
-            other => Err(GremlinError::Cast(format!("Invalid GValue for GID {other:?}")))
+            other => Err(GremlinError::Cast(format!(
+                "Invalid GValue for GID {other:?}"
+            ))),
         }
     }
 }
