@@ -506,12 +506,12 @@ impl GraphBinaryV1Deser for GValue {
 
 impl GraphBinaryV1Deser for T {
     fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
-        let literal = GValue::from_be_bytes_nullable(bytes)?;
+        let literal = GValue::from_be_bytes(bytes)?;
         match literal {
-            Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("id") => Ok(T::Id),
-            Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("key") => Ok(T::Id),
-            Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("label") => Ok(T::Id),
-            Some(GValue::String(literal)) if literal.eq_ignore_ascii_case("value") => Ok(T::Id),
+            GValue::String(literal) if literal.eq_ignore_ascii_case("id") => Ok(T::Id),
+            GValue::String(literal) if literal.eq_ignore_ascii_case("key") => Ok(T::Key),
+            GValue::String(literal) if literal.eq_ignore_ascii_case("label") => Ok(T::Label),
+            GValue::String(literal) if literal.eq_ignore_ascii_case("value") => Ok(T::Value),
             other => Err(GremlinError::Cast(format!(
                 "Unexpected T literal {other:?}"
             ))),

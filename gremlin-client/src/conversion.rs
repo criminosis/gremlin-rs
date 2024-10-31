@@ -157,6 +157,7 @@ impl FromGValue for GKey {
             GValue::Edge(s) => Ok(GKey::Edge(s)),
             GValue::Int64(v) => Ok(GKey::Int64(v)),
             GValue::Int32(v) => Ok(GKey::Int32(v)),
+            GValue::T(t) => Ok(GKey::T(t)),
             _ => Err(GremlinError::Cast(format!(
                 "Cannot convert {:?} to {}",
                 v, "GKey"

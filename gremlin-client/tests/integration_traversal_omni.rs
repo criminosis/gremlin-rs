@@ -8,7 +8,9 @@ use gremlin_client::structure::{
     Cardinality, Column, List, Map, Pop, TextP, Vertex, VertexProperty, P, T,
 };
 
-use gremlin_client::{utils, GKey, GValue, GremlinClient, IoProtocol};
+use gremlin_client::{
+    utils, BorrowFromGValue, GKey, GValue, GremlinClient, GremlinError, IoProtocol,
+};
 
 mod common;
 
@@ -1213,17 +1215,16 @@ fn test_unwrap_map(client: GremlinClient) {
     let results = g.v(vertex.id()).value_map(true).next().unwrap().unwrap();
     let v_id = vertex.id().get::<i64>().unwrap();
 
-    let id = utils::unwrap_map::<i64>(&results, "id", 0);
-    let property = utils::unwrap_map::<String>(&results, "name", 0);
-    let label = utils::unwrap_map::<String>(&results, "label", 0);
-
-    assert_eq!(id.is_ok(), true);
-    assert_eq!(property.is_ok(), true);
-    assert_eq!(label.is_ok(), true);
-
-    assert_eq!(id.unwrap(), v_id);
+    let id = get_map::<i64, _>(&results, "id")
+        .unwrap()
+        .or_else(|| get_map::<i64, _>(&results, T::Id).unwrap());
+    let property = get_map::<String, _>(&results, "name").unwrap();
+    let label = get_map::<String, _>(&results, "label")
+        .unwrap()
+        .or_else(|| get_map::<String, _>(&results, T::Label).unwrap());
+    assert_eq!(id, Some(v_id));
     assert_eq!(property.unwrap(), "test");
-    assert_eq!(label.unwrap(), "test_value_map");
+    assert_eq!(label, Some(vertex.label()));
 }
 
 #[apply(serializers)]
@@ -2626,6 +2627,19 @@ fn test_none_step(client: GremlinClient) {
         .flatten()
         .expect("Should have gotten a response");
     assert_eq!(1, vertex_count);
+}
+
+fn get_map<'a, T, K>(map: &'a Map, key: K) -> Result<Option<&'a T>, GremlinError>
+where
+    T: BorrowFromGValue,
+    K: Into<GKey>,
+{
+    map.get(key)
+        .map(|val| match val {
+            GValue::List(list) => list[0].get::<T>(),
+            other => other.get::<T>(),
+        })
+        .transpose()
 }
 
 #[apply(serializers)]
