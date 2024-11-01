@@ -1168,12 +1168,7 @@ fn test_value_map(client: GremlinClient) {
 
     let value = &results[0];
 
-    assert_eq!(
-        "test",
-        value["name"].get::<List>().unwrap()[0]
-            .get::<String>()
-            .unwrap()
-    );
+    assert_eq!("test", get_map::<String, _>(value, "name").unwrap().unwrap());
 
     let results = g.v(vertex.id()).value_map("name").to_list().unwrap();
 
@@ -1181,22 +1176,19 @@ fn test_value_map(client: GremlinClient) {
 
     let value = &results[0];
 
-    assert_eq!(
-        "test",
-        value["name"].get::<List>().unwrap()[0]
-            .get::<String>()
-            .unwrap()
-    );
+    assert_eq!("test", get_map::<String, _>(value, "name").unwrap().unwrap());
 
     let results = g.v(vertex.id()).value_map("fake").to_list().unwrap();
 
     assert_eq!(0, results[0].len());
 
     let results = g.v(vertex.id()).value_map(true).to_list().unwrap();
+    assert_eq!(1, results.len());
+    let value = &results[0];
 
-    assert_eq!(true, results[0].get("id").is_some());
-    assert_eq!(true, results[0].get("label").is_some());
-    assert_eq!(true, results[0].get("name").is_some());
+    assert_eq!(Some(vertex.id().get().unwrap()), get_map_id(&value).unwrap());
+    assert_eq!(Some(vertex.label()), get_map_label(&value).unwrap());
+    assert_eq!(Some("test".to_owned()).as_ref(), get_map(&value, "name").unwrap());
 }
 
 #[apply(serializers)]
@@ -1215,13 +1207,9 @@ fn test_unwrap_map(client: GremlinClient) {
     let results = g.v(vertex.id()).value_map(true).next().unwrap().unwrap();
     let v_id = vertex.id().get::<i64>().unwrap();
 
-    let id = get_map::<i64, _>(&results, "id")
-        .unwrap()
-        .or_else(|| get_map::<i64, _>(&results, T::Id).unwrap());
+    let id = get_map_id(&results).unwrap();
     let property = get_map::<String, _>(&results, "name").unwrap();
-    let label = get_map::<String, _>(&results, "label")
-        .unwrap()
-        .or_else(|| get_map::<String, _>(&results, T::Label).unwrap());
+    let label = get_map_label(&results).unwrap();
     assert_eq!(id, Some(v_id));
     assert_eq!(property.unwrap(), "test");
     assert_eq!(label, Some(vertex.label()));
@@ -2627,6 +2615,24 @@ fn test_none_step(client: GremlinClient) {
         .flatten()
         .expect("Should have gotten a response");
     assert_eq!(1, vertex_count);
+}
+
+fn get_map_id<'a>(map: &'a Map) -> Result<Option<&i64>, GremlinError>{
+    let string_keyed = get_map(map, "id")?;
+    if string_keyed.is_some() {
+        Ok(string_keyed)
+    } else {
+        get_map(map, T::Id)   
+    }
+}
+
+fn get_map_label<'a>(map: &'a Map) -> Result<Option<&String>, GremlinError>{
+    let string_keyed = get_map(map, "label")?;
+    if string_keyed.is_some() {
+        Ok(string_keyed)
+    } else {
+        get_map(map, T::Label)   
+    }
 }
 
 fn get_map<'a, T, K>(map: &'a Map, key: K) -> Result<Option<&'a T>, GremlinError>
