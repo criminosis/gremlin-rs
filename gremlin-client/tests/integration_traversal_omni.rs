@@ -1245,16 +1245,18 @@ fn test_element_map(client: GremlinClient) {
     assert_eq!("test", value["name"].get::<String>().unwrap());
 
     let results = g.v(vertex.id()).element_map("fake").to_list().unwrap();
+    let value = &results[0];
 
-    assert_eq!(2, results[0].len());
-    assert_eq!(true, results[0].get("id").is_some());
-    assert_eq!(true, results[0].get("label").is_some());
+    assert_eq!(2, value.len());
+    assert_eq!(Some(vertex.id().get().unwrap()), get_map_id(&value).unwrap());
+    assert_eq!(Some(vertex.label()), get_map_label(&value).unwrap());
 
     let results = g.v(vertex.id()).element_map(()).to_list().unwrap();
+    let value = &results[0];
 
-    assert_eq!(true, results[0].get("id").is_some());
-    assert_eq!(true, results[0].get("label").is_some());
-    assert_eq!(true, results[0].get("name").is_some());
+    assert_eq!(Some(vertex.id().get().unwrap()), get_map_id(&value).unwrap());
+    assert_eq!(Some(vertex.label()), get_map_label(&value).unwrap());
+    assert_eq!(Some("test".to_owned()).as_ref(), get_map(&value, "name").unwrap());
 }
 
 #[apply(serializers)]
