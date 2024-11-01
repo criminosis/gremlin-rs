@@ -2316,7 +2316,7 @@ fn test_anonymous_traversal_properties_drop(client: GremlinClient) {
     //Make sure the property was assigned
     assert_map_property(&element_map, pre_drop_prop_key, expected_prop_value);
 
-    let created_vertex_id = element_map.get("id").expect("Should have id property");
+    let created_vertex_id = element_map.get("id").or(element_map.get(T::Id)).expect("Should have id property");
     let GValue::Int64(id) = created_vertex_id else {
         panic!("Not expected id type");
     };
