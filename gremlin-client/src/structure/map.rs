@@ -77,6 +77,10 @@ impl Map {
         self.0.iter()
     }
 
+    pub fn into_iter(self) -> IntoIter<GKey, GValue> {
+        self.0.into_iter()
+    }
+
     ///Returns a reference to the value corresponding to the key.
     pub fn get<T>(&self, key: T) -> Option<&GValue>
     where

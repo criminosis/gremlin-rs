@@ -288,8 +288,20 @@ fn receiver_loop(
                             .read_response(data)
                             .expect("Unable to parse message");
                         let mut guard = requests.lock().await;
+
+                        //GraphBinary permits a null response request id, so in lieu of a request id assume
+                        //a single entry in the requests to be the one we should respond to given connection
+                        //multiplexing isn't currently implemented
+                        let request_id = response.request_id.unwrap_or_else(|| {
+                            if guard.len() == 1 {
+                                guard.keys().next().expect("Should have had only 1 key").clone()
+                            } else {
+                                panic!("Request response without request id was received, but there isn't only 1 request currently submitted");
+                            }
+                        });
+
                         if response.status.code != 206 {
-                            let item = guard.remove(&response.request_id);
+                            let item = guard.remove(&request_id);
                             drop(guard);
                             if let Some(mut s) = item {
                                 match s.send(Ok(response)).await {
@@ -298,7 +310,7 @@ fn receiver_loop(
                                 };
                             }
                         } else {
-                            let item = guard.get_mut(&response.request_id);
+                            let item = guard.get_mut(&request_id);
                             if let Some(s) = item {
                                 match s.send(Ok(response)).await {
                                     Ok(_r) => {}

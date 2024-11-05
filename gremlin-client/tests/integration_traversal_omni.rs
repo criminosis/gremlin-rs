@@ -2137,6 +2137,25 @@ fn test_repeat_until_loops_loops(client: GremlinClient) {
 
 #[apply(serializers)]
 #[serial(test_simple_path)]
+fn test_simple_vertex_property(client: GremlinClient) {
+    drop_vertices(&client, "test_simple_vertex_property").unwrap();
+
+    let g = traversal().with_remote(client);
+
+    let v = g
+        .add_v("test_simple_vertex_property")
+        .property("name", "a")
+        .element_map(())
+        .next()
+        .unwrap()
+        .unwrap();
+
+    let actual_property: &String = v.get("name").expect("Should have property").get().unwrap();
+    assert_eq!(actual_property, "a");
+}
+
+#[apply(serializers)]
+#[serial(test_simple_path)]
 fn test_simple_path(client: GremlinClient) {
     drop_vertices(&client, "test_simple_path").unwrap();
     drop_vertices(&client, "test_simple_path_child").unwrap();

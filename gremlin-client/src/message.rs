@@ -53,7 +53,7 @@ impl<T> Message<T> {
 }
 #[derive(Debug)]
 pub struct Response {
-    pub request_id: Uuid,
+    pub request_id: Option<Uuid>,
     pub result: ResponseResult,
     pub status: ReponseStatus,
 }

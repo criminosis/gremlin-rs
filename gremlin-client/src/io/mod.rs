@@ -57,7 +57,7 @@ impl IoProtocol {
                 let middle_form: MiddleResponse =
                     serde_json::from_slice(&response).map_err(GremlinError::from)?;
                 Ok(Response {
-                    request_id: middle_form.request_id,
+                    request_id: Some(middle_form.request_id),
                     result: ResponseResult {
                         data: serializer_v2::deserializer_v2(&middle_form.result.data).map(Some)?,
                     },
@@ -68,7 +68,7 @@ impl IoProtocol {
                 let middle_form: MiddleResponse =
                     serde_json::from_slice(&response).map_err(GremlinError::from)?;
                 Ok(Response {
-                    request_id: middle_form.request_id,
+                    request_id: Some(middle_form.request_id),
                     result: ResponseResult {
                         data: serializer_v3::deserializer_v3(&middle_form.result.data).map(Some)?,
                     },

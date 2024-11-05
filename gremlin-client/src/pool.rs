@@ -64,7 +64,11 @@ impl ManageConnection for GremlinConnectionManager {
                         "authentication",
                         "traversal",
                         args,
-                        Some(response.request_id),
+                        Some(
+                            response
+                                .request_id
+                                .expect("Auth challenge requires response id"),
+                        ),
                     )?;
                     conn.send(message)?;
 

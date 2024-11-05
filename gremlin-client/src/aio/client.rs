@@ -172,7 +172,11 @@ impl GremlinClient {
                             "authentication",
                             "traversal",
                             args,
-                            Some(response.request_id),
+                            Some(
+                                response
+                                    .request_id
+                                    .expect("Auth challenge requires response id"),
+                            ),
                         )?;
 
                         return self.send_message_new(conn, id, message).await;

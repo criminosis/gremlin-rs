@@ -10,7 +10,7 @@ use crate::{
     message::{ReponseStatus, Response, ResponseResult},
     process::traversal::Instruction,
     structure::{Traverser, T},
-    GKey, GValue, GremlinError, GremlinResult, ToGValue, Vertex, VertexProperty, GID,
+    Edge, GKey, GValue, GremlinError, GremlinResult, ToGValue, Vertex, VertexProperty, GID,
 };
 
 use super::IoProtocol;
@@ -42,6 +42,7 @@ const VERTEX_PROPERTY: u8 = 0x12;
 // const BINDING: u8 = 0x14;
 const BYTECODE: u8 = 0x15;
 //...
+const P: u8 = 0x1E;
 const SCOPE: u8 = 0x1F;
 //TODO fill in others
 
@@ -62,7 +63,7 @@ pub(crate) struct RequestMessage<'a, 'b> {
 
 pub(crate) struct ResponseMessage {
     //Format: {version}{request_id}{status_code}{status_message}{status_attributes}{result_meta}{result_data}
-    pub(crate) request_id: Uuid,
+    pub(crate) request_id: Option<Uuid>,
     pub(crate) status_code: i16,
     pub(crate) status_message: String,
     pub(crate) status_attributes: HashMap<GKey, GValue>,
@@ -111,8 +112,7 @@ impl GraphBinaryV1Deser for ResponseMessage {
         };
 
         //Request id is nullable
-        let request_id =
-            Uuid::from_be_bytes_nullable(bytes)?.expect("TODO what to do with null request id?");
+        let request_id = Uuid::from_be_bytes_nullable(bytes)?;
 
         let status_code = <i32 as GraphBinaryV1Deser>::from_be_bytes(bytes)?
             .try_into()
@@ -284,9 +284,18 @@ impl GraphBinaryV1Ser for &GValue {
                 buf.push(VALUE_FLAG);
                 value.to_be_bytes(buf)?;
             }
-            GValue::Vertex(value) => {
+            GValue::Property(property) => {
+                unimplemented!("")
+            }
+            GValue::Vertex(vertex) => {
                 buf.push(VERTEX);
                 buf.push(VALUE_FLAG);
+                vertex.id().to_be_bytes(buf)?;
+                vertex.label().to_be_bytes(buf)?;
+                GValue::Null.to_be_bytes(buf)?;
+            }
+            GValue::VertexProperty(vertex_property) => {
+                todo!()
             }
             GValue::Bytecode(code) => {
                 //Type code of 0x15: Bytecode
@@ -319,13 +328,15 @@ impl GraphBinaryV1Ser for &GValue {
                 write_instructions(code.steps(), buf)?;
                 write_instructions(code.sources(), buf)?;
             }
-            GValue::Null => {
-                //Type code of 0xfe: Unspecified null object
-                buf.push(UNSPECIFIED_NULL_OBEJECT);
-                //Then the null {value_flag} set and no sequence of bytes.
-                buf.push(VALUE_NULL_FLAG);
+            GValue::P(p) => {
+                //Type code of 0x1e: P
+                buf.push(P);
+                buf.push(VALUE_FLAG);
+                p.operator().to_be_bytes(buf)?;
+                //Seems we only support 1 parameter predicates?
+                GraphBinaryV1Ser::to_be_bytes(1i32, buf)?;
+                p.value().to_be_bytes(buf)?;
             }
-            // GValue::Traverser(traverser) => todo!(),
             GValue::Scope(scope) => {
                 //Type code of 0x1f: Scope
                 buf.push(SCOPE);
@@ -346,6 +357,12 @@ impl GraphBinaryV1Ser for &GValue {
                 buf.push(BOOLEAN);
                 buf.push(VALUE_FLAG);
                 bool.to_be_bytes(buf)?;
+            }
+            GValue::Null => {
+                //Type code of 0xfe: Unspecified null object
+                buf.push(UNSPECIFIED_NULL_OBEJECT);
+                //Then the null {value_flag} set and no sequence of bytes.
+                buf.push(VALUE_NULL_FLAG);
             }
             other => unimplemented!("TODO {other:?}"),
         }
@@ -470,9 +487,10 @@ impl GraphBinaryV1Deser for GValue {
                 Some(value) => GValue::Uuid(value),
                 None => GValue::Null,
             }),
-            EDGE => {
-                todo!()
-            }
+            EDGE => Ok(match Edge::from_be_bytes_nullable(bytes)? {
+                Some(value) => GValue::Edge(value),
+                None => GValue::Null,
+            }),
             PATH => {
                 todo!()
             }
@@ -481,6 +499,10 @@ impl GraphBinaryV1Deser for GValue {
             }
             VERTEX => Ok(match Vertex::from_be_bytes_nullable(bytes)? {
                 Some(value) => GValue::Vertex(value),
+                None => GValue::Null,
+            }),
+            VERTEX_PROPERTY => Ok(match VertexProperty::from_be_bytes_nullable(bytes)? {
+                Some(value) => GValue::VertexProperty(value),
                 None => GValue::Null,
             }),
             T => Ok(match T::from_be_bytes_nullable(bytes)? {
@@ -523,6 +545,87 @@ impl GraphBinaryV1Deser for T {
     }
 }
 
+fn consume_expected_null_reference_bytes<'a, S: Iterator<Item = &'a u8>>(
+    bytes: &mut S,
+    null_reference_descriptor: &str,
+) -> GremlinResult<()> {
+    let GValue::Null = GraphBinaryV1Deser::from_be_bytes(bytes)? else {
+        //Anything else is erroneous
+        return Err(GremlinError::Cast(format!(
+            "{null_reference_descriptor} is supposed to be a \"null\" reference"
+        )));
+    };
+
+    Ok(())
+}
+
+impl GraphBinaryV1Deser for Edge {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        //Format: {id}{label}{inVId}{inVLabel}{outVId}{outVLabel}{parent}{properties}
+
+        //{id} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}
+        let id: GValue = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{label} is a String value.
+        let label: String = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //Ideally we'd just do something like Vertex::from_be_bytes(bytes) for the in/out vertices
+        //however only the id & label is submitted, the "null" properties byte is not
+
+        //{inVId} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
+        let in_v_id: GValue = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{inVLabel} is a String value.
+        let in_v_label: String = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{outVId} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
+        let out_v_id: GValue = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{outVLabel} is a String value.
+        let out_v_label: String = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{parent} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains the parent Vertex. Note that as TinkerPop currently send "references" only, this value will always be null.
+        consume_expected_null_reference_bytes(bytes, "Parent")?;
+
+        //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains the properties for the edge. Note that as TinkerPop currently send "references" only this value will always be null.
+        consume_expected_null_reference_bytes(bytes, "Properties")?;
+        Ok(Edge::new(
+            id.try_into()?,
+            label,
+            in_v_id.try_into()?,
+            in_v_label,
+            out_v_id.try_into()?,
+            out_v_label,
+            HashMap::new(),
+        ))
+    }
+}
+
+impl GraphBinaryV1Deser for VertexProperty {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        //Format: {id}{label}{value}{parent}{properties}
+        //{id} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
+        let id: GValue = GraphBinaryV1Deser::from_be_bytes_nullable(bytes)?
+            .ok_or(GremlinError::Cast(format!("Id bytes not present")))?;
+        let id: GID = id.try_into()?;
+        //{label} is a String value.
+        let label: String = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{value} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
+        let value: GValue =
+            GraphBinaryV1Deser::from_be_bytes_nullable(bytes)?.unwrap_or(GValue::Null);
+
+        //{parent} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains the parent Vertex.
+        //Note that as TinkerPop currently send "references" only, this value will always be null.
+        consume_expected_null_reference_bytes(bytes, "Parent vertex")?;
+
+        //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains properties.
+        //Note that as TinkerPop currently send "references" only, this value will always be null.
+        consume_expected_null_reference_bytes(bytes, "Properties")?;
+        Ok(VertexProperty::new(id, label, value))
+    }
+}
+
 impl GraphBinaryV1Deser for Vertex {
     fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
         //Format: {id}{label}{properties}
@@ -534,11 +637,58 @@ impl GraphBinaryV1Deser for Vertex {
         //Note that as TinkerPop currently send "references" only, this value will always be null.
         //properties: HashMap<String, Vec<VertexProperty>>,
         let properties: GValue = GraphBinaryV1Deser::from_be_bytes(bytes)?;
-        if properties == GValue::Null {
-            //TODO How do vertices get properties then?
-            Ok(Vertex::new(id.try_into()?, label, HashMap::new()))
-        } else {
-            panic!("Remainder: {:?}", properties);
+        match properties {
+            //Should always be null
+            GValue::Null => Ok(Vertex::new(id.try_into()?, label, HashMap::new())),
+            // GValue::Map(map) => {
+            //     let properties = map
+            //         .into_iter()
+            //         .map(|(k, v)| {
+            //             let key = match k {
+            //                 GKey::T(t) => match t {
+            //                     T::Id => "id".to_owned(),
+            //                     T::Key => "key".to_owned(),
+            //                     T::Label => "label".to_owned(),
+            //                     T::Value => "value".to_owned(),
+            //                 },
+            //                 GKey::String(s) => s,
+            //                 GKey::Int64(i) => i.to_string(),
+            //                 GKey::Int32(i) => i.to_string(),
+            //                 _ => {
+            //                     return Err(GremlinError::Cast(format!(
+            //                         "Unsupported vertex property key type"
+            //                     )))
+            //                 }
+            //             };
+
+            //             fn unfurl_gvalue_to_vertex_property(
+            //                 v: GValue,
+            //             ) -> Result<Vec<VertexProperty>, GremlinError> {
+            //                 match v {
+            //                     GValue::VertexProperty(vertex_property) => {
+            //                         Ok(vec![vertex_property])
+            //                     }
+            //                     GValue::List(list) => Ok(list
+            //                         .into_iter()
+            //                         .map(|value| unfurl_gvalue_to_vertex_property(value))
+            //                         .collect::<Result<Vec<Vec<VertexProperty>>, GremlinError>>()?
+            //                         .into_iter()
+            //                         .flat_map(|vec| vec.into_iter())
+            //                         .collect()),
+            //                     _ => Err(GremlinError::Cast(format!(
+            //                         "Unsupported vertex property value type"
+            //                     ))),
+            //                 }
+            //             }
+
+            //             Ok((key, unfurl_gvalue_to_vertex_property(v)?))
+            //         })
+            //         .collect::<Result<HashMap<String, Vec<VertexProperty>>, GremlinError>>()?;
+            //     Ok(Vertex::new(id.try_into()?, label, properties))
+            // }
+            other => Err(GremlinError::Cast(format!(
+                "Unsupported vertex property type: {other:?}"
+            ))),
         }
     }
 }
@@ -588,7 +738,7 @@ impl GraphBinaryV1Deser for Traverser {
     }
 }
 
-impl GraphBinaryV1Deser for Vec<GValue> {
+impl<T: GraphBinaryV1Deser> GraphBinaryV1Deser for Vec<T> {
     fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
         let length = <i32 as GraphBinaryV1Deser>::from_be_bytes(bytes)?
             .try_into()
@@ -596,7 +746,7 @@ impl GraphBinaryV1Deser for Vec<GValue> {
         let mut list = Vec::new();
         list.reserve_exact(length);
         for _ in 0..length {
-            list.push(GValue::from_be_bytes(bytes)?);
+            list.push(T::from_be_bytes(bytes)?);
         }
         Ok(list)
     }
@@ -612,7 +762,9 @@ impl GraphBinaryV1Deser for String {
         let string_value_bytes: Vec<u8> = bytes.take(string_bytes_length).cloned().collect();
         if string_value_bytes.len() < string_bytes_length {
             return Err(GremlinError::Cast(format!(
-                "Missing bytes for String value"
+                "Missing bytes for String value. Expected {} only retrieved {}",
+                string_bytes_length,
+                string_value_bytes.len(),
             )));
         }
         String::from_utf8(string_value_bytes)
