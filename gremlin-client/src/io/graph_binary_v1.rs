@@ -10,7 +10,7 @@ use crate::{
     message::{ReponseStatus, Response, ResponseResult},
     process::traversal::Instruction,
     structure::{Traverser, T},
-    GKey, GValue, GremlinError, GremlinResult, Vertex, GID,
+    GKey, GValue, GremlinError, GremlinResult, ToGValue, Vertex, VertexProperty, GID,
 };
 
 use super::IoProtocol;
@@ -283,6 +283,10 @@ impl GraphBinaryV1Ser for &GValue {
                 buf.push(UUID);
                 buf.push(VALUE_FLAG);
                 value.to_be_bytes(buf)?;
+            }
+            GValue::Vertex(value) => {
+                buf.push(VERTEX);
+                buf.push(VALUE_FLAG);
             }
             GValue::Bytecode(code) => {
                 //Type code of 0x15: Bytecode
@@ -685,6 +689,53 @@ impl GraphBinaryV1Ser for &Uuid {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         buf.extend_from_slice(self.as_bytes().as_slice());
         Ok(())
+    }
+}
+
+impl GraphBinaryV1Ser for &Vertex {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        //Format: {id}{label}{properties}
+
+        //{id} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
+        self.id().to_be_bytes(buf)?;
+
+        //{label} is a String value
+        self.label().to_be_bytes(buf)?;
+
+        //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains properties.
+        self.properties.len();
+        todo!()
+    }
+}
+
+impl GraphBinaryV1Ser for &VertexProperty {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        //Format: {id}{label}{value}{parent}{properties}
+
+        //{id} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
+        self.id().to_be_bytes(buf)?;
+
+        //{label} is a String value.
+        self.label().to_be_bytes(buf)?;
+
+        //{value} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
+        //???????
+
+        //{parent} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains the parent Vertex. Note that as TinkerPop currently send "references" only, this value will always be null.}
+
+        //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains properties.
+
+        todo!()
+    }
+}
+
+impl GraphBinaryV1Ser for &GID {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        match self {
+            GID::String(s) => s.to_gvalue().to_be_bytes(buf),
+            GID::Int32(i) => i.to_gvalue().to_be_bytes(buf),
+            GID::Int64(i) => i.to_gvalue().to_be_bytes(buf),
+        }
     }
 }
 
