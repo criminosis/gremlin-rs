@@ -1,7 +1,6 @@
-use std::{collections::HashMap, convert::TryInto, iter};
+use std::{collections::HashMap, convert::TryInto};
 
 use chrono::{DateTime, TimeZone, Utc};
-use tungstenite::http::request;
 use uuid::Uuid;
 
 use crate::{
@@ -332,10 +331,7 @@ impl GraphBinaryV1Ser for &GValue {
                 //Type code of 0x1e: P
                 buf.push(P);
                 buf.push(VALUE_FLAG);
-                p.operator().to_be_bytes(buf)?;
-                //Seems we only support 1 parameter predicates?
-                GraphBinaryV1Ser::to_be_bytes(1i32, buf)?;
-                p.value().to_be_bytes(buf)?;
+                p.to_be_bytes(buf)?;
             }
             GValue::Scope(scope) => {
                 //Type code of 0x1f: Scope
@@ -353,6 +349,11 @@ impl GraphBinaryV1Ser for &GValue {
                     }
                 }
             }
+            GValue::T(t) => {
+                buf.push(T);
+                buf.push(VALUE_FLAG);
+                t.to_be_bytes(buf)?;
+            }
             GValue::Bool(bool) => {
                 buf.push(BOOLEAN);
                 buf.push(VALUE_FLAG);
@@ -365,6 +366,43 @@ impl GraphBinaryV1Ser for &GValue {
                 buf.push(VALUE_NULL_FLAG);
             }
             other => unimplemented!("TODO {other:?}"),
+        }
+        Ok(())
+    }
+}
+
+impl GraphBinaryV1Ser for &crate::structure::P {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        self.operator().to_be_bytes(buf)?;
+        match self.value() {
+            //Singular values have a length of 1
+            //But still need to be written fully qualified
+            scalar @ GValue::Uuid(_) | 
+            scalar @ GValue::Int32(_) |
+            scalar @ GValue::Int64(_) |
+            scalar @ GValue::Float(_) |
+            scalar @ GValue::Double(_) |
+            scalar @ GValue::String(_) |
+            scalar @ GValue::Date(_) 
+            => {
+                GraphBinaryV1Ser::to_be_bytes(1i32, buf)?;
+                scalar.to_be_bytes(buf)?;
+            }
+            //"Collections" need to be unfurled, we don't write the collection but
+            //instead just its lengths and then the fully qualified form of each element
+            GValue::List(list) => {
+                write_usize_as_i32_be_bytes(list.len(), buf)?;
+                for item in list.iter() {
+                    item.to_be_bytes(buf)?;
+                }
+            }
+            GValue::Set(set) => {
+                write_usize_as_i32_be_bytes(set.len(), buf)?;
+                for item in set.iter() {
+                    item.to_be_bytes(buf)?;
+                }
+            }
+            other => unimplemented!("P serialization of {other:?} not implemented"),
         }
         Ok(())
     }
@@ -525,7 +563,10 @@ impl GraphBinaryV1Deser for GValue {
                     ))),
                 }
             }
-            other => unimplemented!("TODO {other}"),
+            other => {
+                let remainder: Vec<u8> = bytes.cloned().collect();
+                unimplemented!("TODO {other}. Remainder: {remainder:?}");
+            }
         }
     }
 }
@@ -542,6 +583,18 @@ impl GraphBinaryV1Deser for T {
                 "Unexpected T literal {other:?}"
             ))),
         }
+    }
+}
+
+impl GraphBinaryV1Ser for &T {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        let literal = match self {
+            T::Id => "id",
+            T::Key => "key",
+            T::Label => "label",
+            T::Value => "value",
+        };
+        GValue::String(literal.to_owned()).to_be_bytes(buf)
     }
 }
 
@@ -905,6 +958,7 @@ impl GraphBinaryV1Deser for Uuid {
 
 #[cfg(test)]
 mod tests {
+    use std::iter;
     use chrono::DateTime;
     use rstest::rstest;
     use uuid::uuid;

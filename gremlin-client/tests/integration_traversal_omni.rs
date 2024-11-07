@@ -1679,6 +1679,29 @@ fn test_has_with_p_steps(client: GremlinClient) {
 
     let results = g
         .v(())
+        .has(("test_has_with_p_steps", "age", 20))
+        .values("age")
+        .to_list()
+        .unwrap();
+
+    assert_eq!(1, results.len());
+
+    assert_eq!(&20, results[0].get::<i32>().unwrap());
+
+    let results = g
+        .v(())
+        .has_label("test_has_with_p_steps")
+        .values("age")
+        .where_(__.is(P::eq(20)))
+        .to_list()
+        .unwrap();
+
+    assert_eq!(1, results.len());
+
+    assert_eq!(&20, results[0].get::<i32>().unwrap());
+
+    let results = g
+        .v(())
         .has_label("test_has_with_p_steps")
         .values("age")
         .is(P::within(vec![19, 20]))
