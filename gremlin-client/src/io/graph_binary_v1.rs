@@ -8,7 +8,7 @@ use crate::{
     io::graph_binary_v1,
     message::{ReponseStatus, Response, ResponseResult},
     process::traversal::{Instruction, Scope},
-    structure::{Column, Traverser, P, T},
+    structure::{Column, Pop, Traverser, P, T},
     Edge, GKey, GValue, GremlinError, GremlinResult, ToGValue, Vertex, VertexProperty, GID,
 };
 
@@ -42,7 +42,12 @@ const VERTEX_PROPERTY: u8 = 0x12;
 const BYTECODE: u8 = 0x15;
 // const CARDINALITY: u8 = 0x16;
 const COLUMN: u8 = 0x17;
-//...
+// const DIRECTION: u8 = 0x18;
+// const OPERATOR: u8 = 0x19;
+// const ORDER: u8 = 0x1A;
+// const PICK: u8 = 0x1B;
+const POP: u8 = 0x1C;
+// const LAMBDA: u8 = 0x1D;
 const P: u8 = 0x1E;
 const SCOPE: u8 = 0x1F;
 //TODO fill in others
@@ -330,6 +335,11 @@ impl GraphBinaryV1Ser for &GValue {
                 buf.push(VALUE_FLAG);
                 c.to_be_bytes(buf)?;
             }
+            GValue::Pop(pop) => {
+                buf.push(POP);
+                buf.push(VALUE_FLAG);
+                pop.to_be_bytes(buf)?;
+            }
             GValue::P(p) => {
                 //Type code of 0x1e: P
                 buf.push(P);
@@ -405,6 +415,8 @@ impl GraphBinaryV1Ser for &crate::structure::P {
 
 fn write_fully_qualified_str(value: &str, buf: &mut Vec<u8>) -> GremlinResult<()> {
     //Extracted from the GValue implementation so it can be used by enum string values
+    //There are times we want the fully qualified prefix bytes outside of the normal
+    //GValue based route, without having to allocate the string again inside the GValue
 
     //Type code of 0x03: String
     buf.push(STRING);
@@ -419,6 +431,18 @@ impl GraphBinaryV1Ser for &Scope {
         match self {
             Scope::Global => write_fully_qualified_str("global", buf),
             Scope::Local => write_fully_qualified_str("local", buf),
+        }
+    }
+}
+
+impl GraphBinaryV1Ser for &Pop {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        //Format: a fully qualified single String representing the enum value.
+        match self {
+            Pop::All => write_fully_qualified_str("all", buf),
+            Pop::First => write_fully_qualified_str("first", buf),
+            Pop::Last => write_fully_qualified_str("last", buf),
+            Pop::Mixed => write_fully_qualified_str("mixed", buf),
         }
     }
 }
