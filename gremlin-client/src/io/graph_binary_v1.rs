@@ -4,12 +4,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use uuid::Uuid;
 
 use crate::{
-    conversion::FromGValue,
-    io::graph_binary_v1,
-    message::{ReponseStatus, Response, ResponseResult},
-    process::traversal::{Instruction, Scope},
-    structure::{Column, Pop, Traverser, P, T},
-    Edge, GKey, GValue, GremlinError, GremlinResult, ToGValue, Vertex, VertexProperty, GID,
+    conversion::FromGValue, io::graph_binary_v1, message::{ReponseStatus, Response, ResponseResult}, process::traversal::{Instruction, Order, Scope}, structure::{Column, Direction, Pop, Traverser, P, T}, Cardinality, Edge, GKey, GValue, GremlinError, GremlinResult, ToGValue, Vertex, VertexProperty, GID
 };
 
 use super::IoProtocol;
@@ -40,11 +35,11 @@ const VERTEX_PROPERTY: u8 = 0x12;
 // const BARRIER: u8 = 0x13;
 // const BINDING: u8 = 0x14;
 const BYTECODE: u8 = 0x15;
-// const CARDINALITY: u8 = 0x16;
+const CARDINALITY: u8 = 0x16;
 const COLUMN: u8 = 0x17;
-// const DIRECTION: u8 = 0x18;
+const DIRECTION: u8 = 0x18;
 // const OPERATOR: u8 = 0x19;
-// const ORDER: u8 = 0x1A;
+const ORDER: u8 = 0x1A;
 // const PICK: u8 = 0x1B;
 const POP: u8 = 0x1C;
 // const LAMBDA: u8 = 0x1D;
@@ -330,10 +325,25 @@ impl GraphBinaryV1Ser for &GValue {
                 write_instructions(code.steps(), buf)?;
                 write_instructions(code.sources(), buf)?;
             }
-            GValue::Column(c) => {
+            GValue::Cardinality(cardinality) => {
+                buf.push(CARDINALITY);
+                buf.push(VALUE_FLAG);
+                cardinality.to_be_bytes(buf)?;
+            }
+            GValue::Column(column) => {
                 buf.push(COLUMN);
                 buf.push(VALUE_FLAG);
-                c.to_be_bytes(buf)?;
+                column.to_be_bytes(buf)?;
+            }
+            GValue::Direction(direction) => {
+                buf.push(DIRECTION);
+                buf.push(VALUE_FLAG);
+                direction.to_be_bytes(buf)?;
+            }
+            GValue::Order(order) => {
+                buf.push(ORDER);
+                buf.push(VALUE_FLAG);
+                order.to_be_bytes(buf)?;
             }
             GValue::Pop(pop) => {
                 buf.push(POP);
@@ -431,6 +441,37 @@ impl GraphBinaryV1Ser for &Scope {
         match self {
             Scope::Global => write_fully_qualified_str("global", buf),
             Scope::Local => write_fully_qualified_str("local", buf),
+        }
+    }
+}
+
+impl GraphBinaryV1Ser for &Cardinality {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        match self {
+            Cardinality::List => write_fully_qualified_str("list", buf),
+            Cardinality::Set => write_fully_qualified_str("set", buf),
+            Cardinality::Single => write_fully_qualified_str("single", buf),
+        }
+    }
+}
+
+impl GraphBinaryV1Ser for &Direction {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        match self {
+            Direction::Out => write_fully_qualified_str("out", buf),
+            Direction::In => write_fully_qualified_str("in", buf),
+            Direction::From => write_fully_qualified_str("from", buf),
+            Direction::To => write_fully_qualified_str("to", buf),
+        }
+    }
+}
+
+impl GraphBinaryV1Ser for &Order {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        match self {
+            Order::Asc => write_fully_qualified_str("asc", buf),
+            Order::Desc => write_fully_qualified_str("desc", buf),
+            Order::Shuffle => write_fully_qualified_str("shuffle", buf),
         }
     }
 }
@@ -637,13 +678,12 @@ impl GraphBinaryV1Deser for T {
 
 impl GraphBinaryV1Ser for &T {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
-        let literal = match self {
-            T::Id => "id",
-            T::Key => "key",
-            T::Label => "label",
-            T::Value => "value",
-        };
-        GValue::String(literal.to_owned()).to_be_bytes(buf)
+        match self {
+            T::Id => write_fully_qualified_str("id", buf),
+            T::Key => write_fully_qualified_str("key", buf),
+            T::Label => write_fully_qualified_str("label", buf),
+            T::Value => write_fully_qualified_str("value", buf),
+        }
     }
 }
 
