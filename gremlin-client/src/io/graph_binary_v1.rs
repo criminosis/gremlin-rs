@@ -7,8 +7,8 @@ use crate::{
     conversion::FromGValue,
     io::graph_binary_v1,
     message::{ReponseStatus, Response, ResponseResult},
-    process::traversal::Instruction,
-    structure::{Traverser, T},
+    process::traversal::{Instruction, Scope},
+    structure::{Column, Traverser, P, T},
     Edge, GKey, GValue, GremlinError, GremlinResult, ToGValue, Vertex, VertexProperty, GID,
 };
 
@@ -40,6 +40,8 @@ const VERTEX_PROPERTY: u8 = 0x12;
 // const BARRIER: u8 = 0x13;
 // const BINDING: u8 = 0x14;
 const BYTECODE: u8 = 0x15;
+// const CARDINALITY: u8 = 0x16;
+const COLUMN: u8 = 0x17;
 //...
 const P: u8 = 0x1E;
 const SCOPE: u8 = 0x1F;
@@ -217,11 +219,7 @@ impl GraphBinaryV1Ser for &GValue {
                 GraphBinaryV1Ser::to_be_bytes(*value, buf)?;
             }
             GValue::String(value) => {
-                //Type code of 0x03: String
-                buf.push(STRING);
-                //Empty value flag
-                buf.push(VALUE_FLAG);
-                GraphBinaryV1Ser::to_be_bytes(value.as_str(), buf)?;
+                write_fully_qualified_str(value, buf)?;
             }
             GValue::Date(value) => {
                 buf.push(DATE);
@@ -327,6 +325,11 @@ impl GraphBinaryV1Ser for &GValue {
                 write_instructions(code.steps(), buf)?;
                 write_instructions(code.sources(), buf)?;
             }
+            GValue::Column(c) => {
+                buf.push(COLUMN);
+                buf.push(VALUE_FLAG);
+                c.to_be_bytes(buf)?;
+            }
             GValue::P(p) => {
                 //Type code of 0x1e: P
                 buf.push(P);
@@ -339,15 +342,7 @@ impl GraphBinaryV1Ser for &GValue {
                 //Empty value flag
                 buf.push(VALUE_FLAG);
 
-                //Format: a fully qualified single String representing the enum value.
-                match scope {
-                    crate::process::traversal::Scope::Global => {
-                        (&GValue::from(String::from("global"))).to_be_bytes(buf)?
-                    }
-                    crate::process::traversal::Scope::Local => {
-                        (&GValue::from(String::from("local"))).to_be_bytes(buf)?
-                    }
-                }
+                scope.to_be_bytes(buf)?;
             }
             GValue::T(t) => {
                 buf.push(T);
@@ -405,6 +400,36 @@ impl GraphBinaryV1Ser for &crate::structure::P {
             other => unimplemented!("P serialization of {other:?} not implemented"),
         }
         Ok(())
+    }
+}
+
+fn write_fully_qualified_str(value: &str, buf: &mut Vec<u8>) -> GremlinResult<()> {
+    //Extracted from the GValue implementation so it can be used by enum string values
+
+    //Type code of 0x03: String
+    buf.push(STRING);
+    //Empty value flag
+    buf.push(VALUE_FLAG);
+    value.to_be_bytes(buf)
+}
+
+impl GraphBinaryV1Ser for &Scope {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        //Format: a fully qualified single String representing the enum value.
+        match self {
+            Scope::Global => write_fully_qualified_str("global", buf),
+            Scope::Local => write_fully_qualified_str("local", buf),
+        }
+    }
+}
+
+impl GraphBinaryV1Ser for &Column {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        //Format: a fully qualified single String representing the enum value.
+        match self {
+            Column::Keys => write_fully_qualified_str("keys", buf),
+            Column::Values => write_fully_qualified_str("values", buf),
+        }
     }
 }
 
