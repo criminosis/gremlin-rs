@@ -382,10 +382,9 @@ impl GraphBinaryV1Ser for &GValue {
                 bool.to_be_bytes(buf)?;
             }
             GValue::TextP(text_p) => {
-                todo!()
-                // buf.push(BOOLEAN);
-                // buf.push(VALUE_FLAG);
-                // text_p.to_be_bytes(buf)?;
+                buf.push(TEXTP);
+                buf.push(VALUE_FLAG);
+                text_p.to_be_bytes(buf)?;
             }
             GValue::Null => {
                 //Type code of 0xfe: Unspecified null object
