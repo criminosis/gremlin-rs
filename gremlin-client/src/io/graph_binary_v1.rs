@@ -658,15 +658,13 @@ impl GraphBinaryV1Deser for VertexProperty {
     fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
         //Format: {id}{label}{value}{parent}{properties}
         //{id} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
-        let id: GValue = GraphBinaryV1Deser::from_be_bytes_nullable(bytes)?
-            .ok_or(GremlinError::Cast(format!("Id bytes not present")))?;
+        let id: GValue = GValue::from_be_bytes(bytes)?;
         let id: GID = id.try_into()?;
         //{label} is a String value.
         let label: String = GraphBinaryV1Deser::from_be_bytes(bytes)?;
 
         //{value} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
-        let value: GValue =
-            GraphBinaryV1Deser::from_be_bytes_nullable(bytes)?.unwrap_or(GValue::Null);
+        let value: GValue = GValue::from_be_bytes(bytes)?;
 
         //{parent} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains the parent Vertex.
         //Note that as TinkerPop currently send "references" only, this value will always be null.
