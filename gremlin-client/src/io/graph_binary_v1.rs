@@ -4,7 +4,13 @@ use chrono::{DateTime, TimeZone, Utc};
 use uuid::Uuid;
 
 use crate::{
-    conversion::FromGValue, io::graph_binary_v1, message::{ReponseStatus, Response, ResponseResult}, process::traversal::{Instruction, Order, Scope}, structure::{Column, Direction, Pop, Traverser, P, T}, Cardinality, Edge, GKey, GValue, GremlinError, GremlinResult, ToGValue, Vertex, VertexProperty, GID
+    conversion::FromGValue,
+    io::graph_binary_v1,
+    message::{ReponseStatus, Response, ResponseResult},
+    process::traversal::{Instruction, Order, Scope},
+    structure::{Column, Direction, Pop, Set, TextP, Traverser, P, T},
+    Cardinality, Edge, GKey, GValue, GremlinError, GremlinResult, Path, ToGValue, Vertex,
+    VertexProperty, GID,
 };
 
 use super::IoProtocol;
@@ -52,6 +58,7 @@ const T: u8 = 0x20;
 const TRAVERSER: u8 = 0x21;
 //...
 const BOOLEAN: u8 = 0x27;
+const TEXTP: u8 = 0x28;
 //...
 const UNSPECIFIED_NULL_OBEJECT: u8 = 0xFE;
 
@@ -374,6 +381,12 @@ impl GraphBinaryV1Ser for &GValue {
                 buf.push(VALUE_FLAG);
                 bool.to_be_bytes(buf)?;
             }
+            GValue::TextP(text_p) => {
+                todo!()
+                // buf.push(BOOLEAN);
+                // buf.push(VALUE_FLAG);
+                // text_p.to_be_bytes(buf)?;
+            }
             GValue::Null => {
                 //Type code of 0xfe: Unspecified null object
                 buf.push(UNSPECIFIED_NULL_OBEJECT);
@@ -386,40 +399,47 @@ impl GraphBinaryV1Ser for &GValue {
     }
 }
 
+fn predicate_to_be_bytes(
+    operator: &String,
+    value: &GValue,
+    buf: &mut Vec<u8>,
+) -> GremlinResult<()> {
+    operator.to_be_bytes(buf)?;
+    match value {
+        //Singular values have a length of 1
+        //But still need to be written fully qualified
+        scalar @ GValue::Uuid(_)
+        | scalar @ GValue::Int32(_)
+        | scalar @ GValue::Int64(_)
+        | scalar @ GValue::Float(_)
+        | scalar @ GValue::Double(_)
+        | scalar @ GValue::String(_)
+        | scalar @ GValue::Date(_) => {
+            GraphBinaryV1Ser::to_be_bytes(1i32, buf)?;
+            scalar.to_be_bytes(buf)?;
+        }
+        //"Collections" need to be unfurled, we don't write the collection but
+        //instead just its lengths and then the fully qualified form of each element
+        GValue::List(list) => {
+            write_usize_as_i32_be_bytes(list.len(), buf)?;
+            for item in list.iter() {
+                item.to_be_bytes(buf)?;
+            }
+        }
+        GValue::Set(set) => {
+            write_usize_as_i32_be_bytes(set.len(), buf)?;
+            for item in set.iter() {
+                item.to_be_bytes(buf)?;
+            }
+        }
+        other => unimplemented!("Predicate serialization of {other:?} not implemented"),
+    }
+    Ok(())
+}
+
 impl GraphBinaryV1Ser for &crate::structure::P {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
-        self.operator().to_be_bytes(buf)?;
-        match self.value() {
-            //Singular values have a length of 1
-            //But still need to be written fully qualified
-            scalar @ GValue::Uuid(_) | 
-            scalar @ GValue::Int32(_) |
-            scalar @ GValue::Int64(_) |
-            scalar @ GValue::Float(_) |
-            scalar @ GValue::Double(_) |
-            scalar @ GValue::String(_) |
-            scalar @ GValue::Date(_) 
-            => {
-                GraphBinaryV1Ser::to_be_bytes(1i32, buf)?;
-                scalar.to_be_bytes(buf)?;
-            }
-            //"Collections" need to be unfurled, we don't write the collection but
-            //instead just its lengths and then the fully qualified form of each element
-            GValue::List(list) => {
-                write_usize_as_i32_be_bytes(list.len(), buf)?;
-                for item in list.iter() {
-                    item.to_be_bytes(buf)?;
-                }
-            }
-            GValue::Set(set) => {
-                write_usize_as_i32_be_bytes(set.len(), buf)?;
-                for item in set.iter() {
-                    item.to_be_bytes(buf)?;
-                }
-            }
-            other => unimplemented!("P serialization of {other:?} not implemented"),
-        }
-        Ok(())
+        predicate_to_be_bytes(&self.operator, &self.value, buf)
     }
 }
 
@@ -526,9 +546,10 @@ pub trait GraphBinaryV1Deser: Sized {
             Some(VALUE_FLAG) => Self::from_be_bytes(bytes).map(Option::Some),
             Some(VALUE_NULL_FLAG) => Ok(None),
             other => {
+                let remainder: Vec<u8> = bytes.cloned().collect();
                 return Err(GremlinError::Cast(format!(
-                    "Unexpected byte for nullable check: {other:?}"
-                )))
+                    "Unexpected byte for nullable check: {other:?}. Remainder: {remainder:?}"
+                )));
             }
         }
     }
@@ -542,6 +563,12 @@ impl GraphBinaryV1Ser for bool {
             false => buf.push(0x00),
         }
         Ok(())
+    }
+}
+
+impl GraphBinaryV1Ser for &TextP {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        predicate_to_be_bytes(&self.operator, &self.value, buf)
     }
 }
 
@@ -619,9 +646,10 @@ impl GraphBinaryV1Deser for GValue {
                 Some(value) => GValue::Edge(value),
                 None => GValue::Null,
             }),
-            PATH => {
-                todo!()
-            }
+            PATH => Ok(match Path::from_be_bytes_nullable(bytes)? {
+                Some(value) => GValue::Path(value),
+                None => GValue::Null,
+            }),
             PROPERTY => {
                 todo!()
             }
@@ -740,6 +768,16 @@ impl GraphBinaryV1Deser for Edge {
             out_v_label,
             HashMap::new(),
         ))
+    }
+}
+
+impl GraphBinaryV1Deser for Path {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        let labels = GValue::from_be_bytes(bytes)?;
+        let GValue::List(objects) = GValue::from_be_bytes(bytes)? else {
+            return Err(GremlinError::Cast(format!("Path objects should be a list")));
+        };
+        Ok(Path::new(labels, objects))
     }
 }
 
@@ -1045,9 +1083,9 @@ impl GraphBinaryV1Deser for Uuid {
 
 #[cfg(test)]
 mod tests {
-    use std::iter;
     use chrono::DateTime;
     use rstest::rstest;
+    use std::iter;
     use uuid::uuid;
 
     use super::*;

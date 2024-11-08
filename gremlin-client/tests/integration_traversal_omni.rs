@@ -1201,6 +1201,12 @@ fn test_value_map(client: GremlinClient) {
         Some("test".to_owned()).as_ref(),
         get_map(&value, "name").unwrap()
     );
+    assert!(results[0].get("id").or(results[0].get(T::Id)).is_some());
+    assert!(results[0]
+        .get("label")
+        .or(results[0].get(T::Label))
+        .is_some());
+    assert_eq!(true, results[0].get("name").is_some());
 }
 
 #[apply(serializers)]
@@ -1265,6 +1271,12 @@ fn test_element_map(client: GremlinClient) {
         get_map_id(&value).unwrap()
     );
     assert_eq!(Some(vertex.label()), get_map_label(&value).unwrap());
+    assert_eq!(2, results[0].len());
+    assert!(results[0].get("id").or(results[0].get(T::Id)).is_some());
+    assert!(results[0]
+        .get("label")
+        .or(results[0].get(T::Label))
+        .is_some());
 
     let results = g.v(vertex.id()).element_map(()).to_list().unwrap();
     let value = &results[0];
@@ -1278,6 +1290,12 @@ fn test_element_map(client: GremlinClient) {
         Some("test".to_owned()).as_ref(),
         get_map(&value, "name").unwrap()
     );
+    assert!(results[0].get("id").or(results[0].get(T::Id)).is_some());
+    assert!(results[0]
+        .get("label")
+        .or(results[0].get(T::Label))
+        .is_some());
+    assert_eq!(true, results[0].get("name").is_some());
 }
 
 #[apply(serializers)]
