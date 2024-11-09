@@ -8,7 +8,7 @@ use crate::{
     io::graph_binary_v1,
     message::{ReponseStatus, Response, ResponseResult},
     process::traversal::{Instruction, Order, Scope},
-    structure::{Column, Direction, Pop, Set, TextP, Traverser, P, T},
+    structure::{Column, Direction, Merge, Pop, TextP, Traverser, T},
     Cardinality, Edge, GKey, GValue, GremlinError, GremlinResult, Path, ToGValue, Vertex,
     VertexProperty, GID,
 };
@@ -34,7 +34,7 @@ const SET: u8 = 0x0B;
 const UUID: u8 = 0x0C;
 const EDGE: u8 = 0x0D;
 const PATH: u8 = 0x0E;
-const PROPERTY: u8 = 0x0F;
+// const PROPERTY: u8 = 0x0F;
 // const TINKERGRAPH: u8 = 0x10;
 const VERTEX: u8 = 0x11;
 const VERTEX_PROPERTY: u8 = 0x12;
@@ -60,6 +60,7 @@ const TRAVERSER: u8 = 0x21;
 const BOOLEAN: u8 = 0x27;
 const TEXTP: u8 = 0x28;
 //...
+const MERGE: u8 = 0x2E;
 const UNSPECIFIED_NULL_OBEJECT: u8 = 0xFE;
 
 pub(crate) struct RequestMessage<'a, 'b> {
@@ -288,18 +289,12 @@ impl GraphBinaryV1Ser for &GValue {
                 buf.push(VALUE_FLAG);
                 value.to_be_bytes(buf)?;
             }
-            GValue::Property(property) => {
-                unimplemented!("")
-            }
             GValue::Vertex(vertex) => {
                 buf.push(VERTEX);
                 buf.push(VALUE_FLAG);
                 vertex.id().to_be_bytes(buf)?;
                 vertex.label().to_be_bytes(buf)?;
                 GValue::Null.to_be_bytes(buf)?;
-            }
-            GValue::VertexProperty(vertex_property) => {
-                todo!()
             }
             GValue::Bytecode(code) => {
                 //Type code of 0x15: Bytecode
@@ -386,13 +381,18 @@ impl GraphBinaryV1Ser for &GValue {
                 buf.push(VALUE_FLAG);
                 text_p.to_be_bytes(buf)?;
             }
+            GValue::Merge(merge) => {
+                buf.push(MERGE);
+                buf.push(VALUE_FLAG);
+                merge.to_be_bytes(buf)?;
+            }
             GValue::Null => {
                 //Type code of 0xfe: Unspecified null object
                 buf.push(UNSPECIFIED_NULL_OBEJECT);
                 //Then the null {value_flag} set and no sequence of bytes.
                 buf.push(VALUE_NULL_FLAG);
             }
-            other => unimplemented!("TODO {other:?}"),
+            other => unimplemented!("Serializing GValue {other:?}"),
         }
         Ok(())
     }
@@ -454,80 +454,106 @@ fn write_fully_qualified_str(value: &str, buf: &mut Vec<u8>) -> GremlinResult<()
     value.to_be_bytes(buf)
 }
 
+impl GraphBinaryV1Ser for &Merge {
+    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
+        let literal = match self {
+            Merge::OnCreate => "onCreate",
+            Merge::OnMatch => "onMatch",
+            Merge::OutV => "outV",
+            Merge::InV => "inV",
+        };
+        write_fully_qualified_str(literal, buf)
+    }
+}
+
 impl GraphBinaryV1Ser for &Scope {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         //Format: a fully qualified single String representing the enum value.
-        match self {
-            Scope::Global => write_fully_qualified_str("global", buf),
-            Scope::Local => write_fully_qualified_str("local", buf),
-        }
+        let literal = match self {
+            Scope::Global => "global",
+            Scope::Local => "local",
+        };
+        write_fully_qualified_str(literal, buf)
     }
 }
 
 impl GraphBinaryV1Ser for &Cardinality {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
-        match self {
-            Cardinality::List => write_fully_qualified_str("list", buf),
-            Cardinality::Set => write_fully_qualified_str("set", buf),
-            Cardinality::Single => write_fully_qualified_str("single", buf),
+        let literal = match self {
+            Cardinality::List => "list",
+            Cardinality::Set => "set",
+            Cardinality::Single => "single",
+        };
+        write_fully_qualified_str(literal, buf)
+    }
+}
+
+impl GraphBinaryV1Deser for Direction {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        match GValue::from_be_bytes(bytes)? {
+            GValue::String(literal) if literal.eq_ignore_ascii_case("out") => Ok(Direction::Out),
+            GValue::String(literal) if literal.eq_ignore_ascii_case("in") => Ok(Direction::In),
+            other => Err(GremlinError::Cast(format!(
+                "Unexpected direction literal {other:?}"
+            ))),
         }
     }
 }
 
 impl GraphBinaryV1Ser for &Direction {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
-        match self {
-            Direction::Out => write_fully_qualified_str("out", buf),
-            Direction::In => write_fully_qualified_str("in", buf),
-            Direction::From => write_fully_qualified_str("from", buf),
-            Direction::To => write_fully_qualified_str("to", buf),
-        }
+        let literal = match self {
+            Direction::Out | Direction::From => "OUT",
+            Direction::In | Direction::To => "IN",
+        };
+        write_fully_qualified_str(literal, buf)
     }
 }
 
 impl GraphBinaryV1Ser for &Order {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
-        match self {
-            Order::Asc => write_fully_qualified_str("asc", buf),
-            Order::Desc => write_fully_qualified_str("desc", buf),
-            Order::Shuffle => write_fully_qualified_str("shuffle", buf),
-        }
+        let literal = match self {
+            Order::Asc => "asc",
+            Order::Desc => "desc",
+            Order::Shuffle => "shuffle",
+        };
+        write_fully_qualified_str(literal, buf)
     }
 }
 
 impl GraphBinaryV1Ser for &Pop {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         //Format: a fully qualified single String representing the enum value.
-        match self {
-            Pop::All => write_fully_qualified_str("all", buf),
-            Pop::First => write_fully_qualified_str("first", buf),
-            Pop::Last => write_fully_qualified_str("last", buf),
-            Pop::Mixed => write_fully_qualified_str("mixed", buf),
-        }
+        let literal = match self {
+            Pop::All => "all",
+            Pop::First => "first",
+            Pop::Last => "last",
+            Pop::Mixed => "mixed",
+        };
+        write_fully_qualified_str(literal, buf)
     }
 }
 
 impl GraphBinaryV1Ser for &Column {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         //Format: a fully qualified single String representing the enum value.
-        match self {
-            Column::Keys => write_fully_qualified_str("keys", buf),
-            Column::Values => write_fully_qualified_str("values", buf),
-        }
+        let literal = match self {
+            Column::Keys => "keys",
+            Column::Values => "values",
+        };
+        write_fully_qualified_str(literal, buf)
     }
 }
 
 impl GraphBinaryV1Ser for &GKey {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         match self {
-            GKey::T(t) => todo!(),
-            GKey::String(str) => (&GValue::from(str.clone())).to_be_bytes(buf),
-            GKey::Token(token) => todo!(),
-            GKey::Vertex(vertex) => todo!(),
-            GKey::Edge(edge) => todo!(),
-            GKey::Direction(direction) => todo!(),
-            GKey::Int64(_) => todo!(),
-            GKey::Int32(_) => todo!(),
+            GKey::T(t) => GValue::T(t.clone()).to_be_bytes(buf),
+            GKey::String(str) => write_fully_qualified_str(str, buf),
+            GKey::Direction(direction) => GValue::Direction(direction.clone()).to_be_bytes(buf),
+            GKey::Int64(i) => GValue::Int64(*i).to_be_bytes(buf),
+            GKey::Int32(i) => GValue::Int32(*i).to_be_bytes(buf),
+            other => unimplemented!("Unimplemented GKey serialization requested {other:?}"),
         }
     }
 }
@@ -649,15 +675,16 @@ impl GraphBinaryV1Deser for GValue {
                 Some(value) => GValue::Path(value),
                 None => GValue::Null,
             }),
-            PROPERTY => {
-                todo!()
-            }
             VERTEX => Ok(match Vertex::from_be_bytes_nullable(bytes)? {
                 Some(value) => GValue::Vertex(value),
                 None => GValue::Null,
             }),
             VERTEX_PROPERTY => Ok(match VertexProperty::from_be_bytes_nullable(bytes)? {
                 Some(value) => GValue::VertexProperty(value),
+                None => GValue::Null,
+            }),
+            DIRECTION => Ok(match Direction::from_be_bytes_nullable(bytes)? {
+                Some(value) => GValue::Direction(value),
                 None => GValue::Null,
             }),
             T => Ok(match T::from_be_bytes_nullable(bytes)? {
@@ -705,12 +732,13 @@ impl GraphBinaryV1Deser for T {
 
 impl GraphBinaryV1Ser for &T {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
-        match self {
-            T::Id => write_fully_qualified_str("id", buf),
-            T::Key => write_fully_qualified_str("key", buf),
-            T::Label => write_fully_qualified_str("label", buf),
-            T::Value => write_fully_qualified_str("value", buf),
-        }
+        let literal = match self {
+            T::Id => "id",
+            T::Key => "key",
+            T::Label => "label",
+            T::Value => "value",
+        };
+        write_fully_qualified_str(literal, buf)
     }
 }
 

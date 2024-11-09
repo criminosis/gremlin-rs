@@ -24,6 +24,14 @@ use common::io::{
     graph_serializer,
 };
 
+//GraphSONV2 doesn't appear to support merge steps, so ommit it from
+//being one of the serializers tested for those tests
+#[template]
+#[rstest]
+#[case::graphson_v3(graph_serializer(IoProtocol::GraphSONV3))]
+#[case::graph_binary_v1(graph_serializer(IoProtocol::GraphBinaryV1))]
+fn merge_capable_serializers(#[case] client: GremlinClient) {}
+
 #[template]
 #[rstest]
 #[case::graphson_v2(graph_serializer(IoProtocol::GraphSONV2))]
@@ -41,7 +49,7 @@ mod merge_tests {
     };
     use std::collections::HashMap;
 
-    #[apply(serializers)]
+    #[apply(merge_capable_serializers)]
     #[serial(test_merge_v_no_options)]
     fn test_merge_v_no_options(client: GremlinClient) {
         let test_vertex_label = "test_merge_v_no_options";
@@ -76,7 +84,7 @@ mod merge_tests {
         assert_map_property(&vertex_properties, "propertyKey", "propertyValue");
     }
 
-    #[apply(serializers)]
+    #[apply(merge_capable_serializers)]
     #[serial(test_merge_v_options)]
     fn test_merge_v_options(client: GremlinClient) {
         let expected_label = "test_merge_v_options";
@@ -127,7 +135,7 @@ mod merge_tests {
         assert_map_property(&on_match_vertex_map, prop_key, expected_on_match_prop_value);
     }
 
-    #[apply(serializers)]
+    #[apply(merge_capable_serializers)]
     #[serial(test_merge_v_start_step)]
     fn test_merge_v_start_step(client: GremlinClient) {
         let expected_label = "test_merge_v_start_step";
@@ -144,7 +152,7 @@ mod merge_tests {
         assert_eq!(expected_label, actual_vertex.label())
     }
 
-    #[apply(serializers)]
+    #[apply(merge_capable_serializers)]
     #[serial(test_merge_v_anonymous_traversal)]
     fn test_merge_v_anonymous_traversal(client: GremlinClient) {
         let expected_label = "test_merge_v_anonymous_traversal";
@@ -162,7 +170,7 @@ mod merge_tests {
         assert_eq!(expected_label, actual_vertex.label())
     }
 
-    #[apply(serializers)]
+    #[apply(merge_capable_serializers)]
     #[serial(test_merge_e_start_step)]
     fn test_merge_e_start_step(client: GremlinClient) {
         let expected_vertex_label = "test_merge_e_start_step_vertex";
@@ -215,6 +223,7 @@ mod merge_tests {
 
         let incoming_vertex_id = incoming_vertex
             .get("id")
+            .or(incoming_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(incoming_vertex_id, &vertex_a.id().to_gvalue());
 
@@ -225,11 +234,12 @@ mod merge_tests {
             .unwrap();
         let outgoing_vertex_id = outgoing_vertex
             .get("id")
+            .or(outgoing_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(outgoing_vertex_id, &vertex_b.id().to_gvalue());
     }
 
-    #[apply(serializers)]
+    #[apply(merge_capable_serializers)]
     #[serial(test_merge_e_no_options)]
     fn test_merge_e_no_options(client: GremlinClient) {
         let expected_vertex_label = "test_merge_e_no_options_vertex";
@@ -284,6 +294,7 @@ mod merge_tests {
             .unwrap();
         let incoming_vertex_id = incoming_vertex
             .get("id")
+            .or(incoming_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(incoming_vertex_id, &vertex_a.id().to_gvalue());
 
@@ -294,11 +305,12 @@ mod merge_tests {
             .unwrap();
         let outgoing_vertex_id = outgoing_vertex
             .get("id")
+            .or(outgoing_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(outgoing_vertex_id, &vertex_b.id().to_gvalue());
     }
 
-    #[apply(serializers)]
+    #[apply(merge_capable_serializers)]
     #[serial(test_merge_e_options)]
     fn test_merge_e_options(client: GremlinClient) {
         let expected_vertex_label = "test_merge_e_options_vertex";
@@ -368,7 +380,7 @@ mod merge_tests {
         );
     }
 
-    #[apply(serializers)]
+    #[apply(merge_capable_serializers)]
     #[serial(test_merge_e_anonymous_traversal)]
     fn test_merge_e_anonymous_traversal(client: GremlinClient) {
         let expected_vertex_label = "test_merge_e_options_vertex";
@@ -409,6 +421,7 @@ mod merge_tests {
             .unwrap();
         let incoming_vertex_id = incoming_vertex
             .get("id")
+            .or(incoming_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(incoming_vertex_id, &vertex_a.id().to_gvalue());
 
@@ -419,11 +432,12 @@ mod merge_tests {
             .unwrap();
         let outgoing_vertex_id = outgoing_vertex
             .get("id")
+            .or(outgoing_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(outgoing_vertex_id, &vertex_b.id().to_gvalue());
     }
 
-    #[apply(serializers)]
+    #[apply(merge_capable_serializers)]
     #[serial(test_merge_v_into_merge_e)]
     fn test_merge_v_into_merge_e(client: GremlinClient) {
         //Based on the reference doc's combo example
@@ -472,6 +486,7 @@ mod merge_tests {
             .unwrap();
         let brandy_vertex_id = brandy_vertex
             .get("id")
+            .or(brandy_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(*brandy_vertex_id, GValue::Int64(expected_brandy_id));
 
@@ -482,6 +497,7 @@ mod merge_tests {
             .unwrap();
         let toby_vertex_id = toby_vertex
             .get("id")
+            .or(toby_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(*toby_vertex_id, GValue::Int64(expected_toby_id));
 
