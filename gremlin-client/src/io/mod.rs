@@ -40,17 +40,6 @@ pub struct MiddleResponseResult {
 }
 
 impl IoProtocol {
-    pub fn read(&self, value: &Value) -> GremlinResult<Option<GValue>> {
-        if let Value::Null = value {
-            return Ok(None);
-        }
-        match self {
-            IoProtocol::GraphSONV2 => serializer_v2::deserializer_v2(value).map(Some),
-            IoProtocol::GraphSONV3 => serializer_v3::deserializer_v3(value).map(Some),
-            IoProtocol::GraphBinaryV1 => todo!(),
-        }
-    }
-
     pub fn read_response(&self, response: Vec<u8>) -> GremlinResult<Response> {
         match self {
             IoProtocol::GraphSONV2 => {

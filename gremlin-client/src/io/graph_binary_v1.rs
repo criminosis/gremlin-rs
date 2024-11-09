@@ -51,15 +51,10 @@ const POP: u8 = 0x1C;
 // const LAMBDA: u8 = 0x1D;
 const P: u8 = 0x1E;
 const SCOPE: u8 = 0x1F;
-//TODO fill in others
-
-//...
 const T: u8 = 0x20;
 const TRAVERSER: u8 = 0x21;
-//...
 const BOOLEAN: u8 = 0x27;
 const TEXTP: u8 = 0x28;
-//...
 const MERGE: u8 = 0x2E;
 const UNSPECIFIED_NULL_OBEJECT: u8 = 0xFE;
 
@@ -127,8 +122,7 @@ impl GraphBinaryV1Deser for ResponseMessage {
             .try_into()
             .expect("Status code should fit in i16");
         //Status message is nullable
-        let status_message = String::from_be_bytes_nullable(bytes)?
-            .expect("TODO what to do with null status message");
+        let status_message = String::from_be_bytes_nullable(bytes)?.unwrap_or_default();
 
         let status_attributes = GraphBinaryV1Deser::from_be_bytes(bytes)?;
         let result_meta: HashMap<GKey, GValue> = GraphBinaryV1Deser::from_be_bytes(bytes)?;
@@ -571,9 +565,8 @@ pub trait GraphBinaryV1Deser: Sized {
             Some(VALUE_FLAG) => Self::from_be_bytes(bytes).map(Option::Some),
             Some(VALUE_NULL_FLAG) => Ok(None),
             other => {
-                let remainder: Vec<u8> = bytes.cloned().collect();
                 return Err(GremlinError::Cast(format!(
-                    "Unexpected byte for nullable check: {other:?}. Remainder: {remainder:?}"
+                    "Unexpected byte for nullable check: {other:?}"
                 )));
             }
         }
@@ -708,8 +701,7 @@ impl GraphBinaryV1Deser for GValue {
                 }
             }
             other => {
-                let remainder: Vec<u8> = bytes.cloned().collect();
-                unimplemented!("TODO {other}. Remainder: {remainder:?}");
+                unimplemented!("Unimplemented deserialization byte {other}");
             }
         }
     }
@@ -1046,43 +1038,6 @@ impl GraphBinaryV1Ser for &Uuid {
     fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
         buf.extend_from_slice(self.as_bytes().as_slice());
         Ok(())
-    }
-}
-
-impl GraphBinaryV1Ser for &Vertex {
-    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
-        //Format: {id}{label}{properties}
-
-        //{id} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
-        self.id().to_be_bytes(buf)?;
-
-        //{label} is a String value
-        self.label().to_be_bytes(buf)?;
-
-        //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains properties.
-        self.properties.len();
-        todo!()
-    }
-}
-
-impl GraphBinaryV1Ser for &VertexProperty {
-    fn to_be_bytes(self, buf: &mut Vec<u8>) -> GremlinResult<()> {
-        //Format: {id}{label}{value}{parent}{properties}
-
-        //{id} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
-        self.id().to_be_bytes(buf)?;
-
-        //{label} is a String value.
-        self.label().to_be_bytes(buf)?;
-
-        //{value} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}.
-        //???????
-
-        //{parent} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains the parent Vertex. Note that as TinkerPop currently send "references" only, this value will always be null.}
-
-        //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains properties.
-
-        todo!()
     }
 }
 
