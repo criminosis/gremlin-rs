@@ -24,14 +24,6 @@ use common::io::{
     graph_serializer,
 };
 
-//GraphSONV2 doesn't appear to support merge steps, so ommit it from
-//being one of the serializers tested for those tests
-#[template]
-#[rstest]
-#[case::graphson_v3(graph_serializer(IoProtocol::GraphSONV3))]
-#[case::graph_binary_v1(graph_serializer(IoProtocol::GraphBinaryV1))]
-fn merge_capable_serializers(#[case] client: GremlinClient) {}
-
 #[template]
 #[rstest]
 #[case::graphson_v2(graph_serializer(IoProtocol::GraphSONV2))]
@@ -48,6 +40,14 @@ mod merge_tests {
         Edge, GValue, ToGValue,
     };
     use std::collections::HashMap;
+
+    //GraphSONV2 doesn't appear to support merge steps, so omit it from
+    //being one of the serializers tested for those tests
+    #[template]
+    #[rstest]
+    #[case::graphson_v3(graph_serializer(IoProtocol::GraphSONV3))]
+    #[case::graph_binary_v1(graph_serializer(IoProtocol::GraphBinaryV1))]
+    fn merge_capable_serializers(#[case] client: GremlinClient) {}
 
     #[apply(merge_capable_serializers)]
     #[serial(test_merge_v_no_options)]
