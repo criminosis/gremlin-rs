@@ -9,8 +9,8 @@ use crate::{
     message::{ReponseStatus, Response, ResponseResult},
     process::traversal::{Instruction, Order, Scope},
     structure::{Column, Direction, Merge, Pop, TextP, Traverser, T},
-    Cardinality, Edge, GKey, GValue, GremlinError, GremlinResult, Path, ToGValue, Vertex,
-    VertexProperty, GID,
+    Cardinality, Edge, GKey, GValue, GremlinError, GremlinResult, Metric, Path, ToGValue,
+    TraversalMetrics, Vertex, VertexProperty, GID,
 };
 
 use super::IoProtocol;
@@ -55,6 +55,8 @@ const T: u8 = 0x20;
 const TRAVERSER: u8 = 0x21;
 const BOOLEAN: u8 = 0x27;
 const TEXTP: u8 = 0x28;
+const MERTRICS: u8 = 0x2C;
+const TRAVERSAL_MERTRICS: u8 = 0x2D;
 const MERGE: u8 = 0x2E;
 const UNSPECIFIED_NULL_OBEJECT: u8 = 0xFE;
 
@@ -691,6 +693,18 @@ impl GraphBinaryV1Deser for GValue {
                     .map(|val| GValue::Traverser(val))
                     .unwrap_or(GValue::Null))
             }
+            BOOLEAN => Ok(match bool::from_be_bytes_nullable(bytes)? {
+                Some(value) => GValue::Bool(value),
+                None => GValue::Null,
+            }),
+            MERTRICS => Ok(match Metric::from_be_bytes_nullable(bytes)? {
+                Some(value) => GValue::Metric(value),
+                None => GValue::Null,
+            }),
+            TRAVERSAL_MERTRICS => Ok(match TraversalMetrics::from_be_bytes_nullable(bytes)? {
+                Some(value) => GValue::TraversalMetrics(value),
+                None => GValue::Null,
+            }),
             UNSPECIFIED_NULL_OBEJECT => {
                 //Need to confirm the null-ness with the next byte being a 1
                 match bytes.next().cloned() {
@@ -704,6 +718,75 @@ impl GraphBinaryV1Deser for GValue {
                 unimplemented!("Unimplemented deserialization byte {other}");
             }
         }
+    }
+}
+
+impl GraphBinaryV1Deser for TraversalMetrics {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        //Format: {duration}{metrics}
+
+        //{duration} is a Long describing the duration in nanoseconds
+        let duration: i64 = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{metrics} is a List composed by Metrics items
+        let metrics: Vec<GValue> = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        let metrics: Result<Vec<Metric>, GremlinError> = metrics
+            .into_iter()
+            .map(|value| Metric::from_gvalue(value))
+            .collect();
+
+        //It doesn't appear documented but assuming the duration unit inherited from GraphSON is ms, so convert here
+        let duration_ms = duration as f64 / 1_000.0;
+        Ok(TraversalMetrics::new(duration_ms, metrics?))
+    }
+}
+
+impl GraphBinaryV1Deser for Metric {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        //Format: {id}{name}{duration}{counts}{annotations}{nested_metrics}
+
+        //{id} is a String representing the identifier
+        let id = String::from_be_bytes(bytes)?;
+        //{name} is a String representing the name
+        let name = String::from_be_bytes(bytes)?;
+
+        //{duration} is a Long describing the duration in nanoseconds
+        let duration: i64 = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{counts} is a Map composed by String keys and Long values
+        let mut counts: HashMap<GKey, GValue> = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{annotations} is a Map composed by String keys and a value of any type
+        let mut annotations: HashMap<GKey, GValue> = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{nested_metrics} is a List composed by Metrics items
+        let nested = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        let traverser_count =
+            i64::from_gvalue(counts.remove(&GKey::from("traverserCount")).ok_or(
+                GremlinError::Cast(format!("Missing expected traverserCount property")),
+            )?)?;
+
+        let element_count = i64::from_gvalue(counts.remove(&GKey::from("elementCount")).ok_or(
+            GremlinError::Cast(format!("Missing expected elementCount property")),
+        )?)?;
+        let percent_dur = f64::from_gvalue(annotations.remove(&GKey::from("percentDur")).ok_or(
+            GremlinError::Cast(format!("Missing expected percentDur property")),
+        )?)?;
+
+        //It doesn't appear documented but assuming the duration unit inherited from GraphSON is ms, so convert here
+        let duration_ms = duration as f64 / 1_000.0;
+
+        Ok(Metric::new(
+            id,
+            name,
+            duration_ms,
+            element_count,
+            traverser_count,
+            percent_dur,
+            nested,
+        ))
     }
 }
 

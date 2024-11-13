@@ -1,4 +1,5 @@
 use gremlin_client::{structure::T, Map};
+use rstest_reuse::template;
 
 pub fn assert_map_property(element_map: &Map, expected_key: &str, expected_value: &str) {
     let actual_prop_value: &String = element_map
@@ -14,6 +15,13 @@ pub fn assert_map_property(element_map: &Map, expected_key: &str, expected_value
         .expect("Should be String");
     assert_eq!(expected_value, actual_prop_value);
 }
+
+#[template]
+#[rstest]
+#[case::graphson_v2(IoProtocol::GraphSONV2)]
+#[case::graphson_v3(IoProtocol::GraphSONV3)]
+#[case::graph_binary_v1(IoProtocol::GraphBinaryV1)]
+fn serializers(#[case] protocol: IoProtocol) {}
 
 #[allow(dead_code)]
 pub mod io {
@@ -55,12 +63,6 @@ pub mod io {
 
     pub fn expect_client_serializer(serializer: IoProtocol) -> GremlinClient {
         connect_serializer(serializer).expect("It should connect")
-    }
-
-    pub fn graph() -> GremlinClient {
-        let client = expect_client();
-
-        client
     }
 
     pub fn graph_serializer(serializer: IoProtocol) -> GremlinClient {

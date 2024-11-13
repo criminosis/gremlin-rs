@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::{io::graph_binary_v1::GraphBinaryV1Ser, GKey, GremlinError, GremlinResult, Message};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IoProtocol {
     GraphSONV2,
     GraphSONV3,
