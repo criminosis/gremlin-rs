@@ -8,9 +8,7 @@ use gremlin_client::structure::{
     Cardinality, Column, List, Map, Pop, TextP, Vertex, VertexProperty, P, T,
 };
 
-use gremlin_client::{
-    utils, BorrowFromGValue, GKey, GValue, GremlinError, IoProtocol,
-};
+use gremlin_client::{utils, BorrowFromGValue, GKey, GValue, GremlinError, IoProtocol};
 
 mod common;
 
