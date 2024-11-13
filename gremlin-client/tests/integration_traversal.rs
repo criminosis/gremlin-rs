@@ -373,19 +373,30 @@ mod merge_tests {
         injection_map.insert("match_params".into(), on_match_map.into());
 
         let do_merge_edge = |g: GraphTraversalSource<SyncTerminator>| -> Map {
-            g.inject(vec![injection_map.clone().into()])
-                .unfold()
-                .as_("payload")
-                .merge_e(__.select("payload").select("merge_params"))
-                .option((
-                    Merge::OnCreate,
-                    __.select("payload").select("create_params"),
-                ))
-                .option((Merge::OnMatch, __.select("payload").select("match_params")))
-                .element_map(())
-                .next()
-                .expect("Should get a response")
-                .expect("Should return a edge properties")
+            let mut attempt = 0;
+            loop {
+                attempt += 1;
+                let response = g
+                    .inject(vec![injection_map.clone().into()])
+                    .unfold()
+                    .as_("payload")
+                    .merge_e(__.select("payload").select("merge_params"))
+                    .option((
+                        Merge::OnCreate,
+                        __.select("payload").select("create_params"),
+                    ))
+                    .option((Merge::OnMatch, __.select("payload").select("match_params")))
+                    .element_map(())
+                    .next();
+                if response.is_ok() {
+                    break response;
+                } else if attempt > 10 {
+                    std::panic!("mergeE vertices not observed before attempt exhaustion")
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            .expect("Should get a response")
+            .expect("Should return a edge properties")
         };
 
         let on_create_edge_properties = do_merge_edge(g.clone());
@@ -436,14 +447,24 @@ mod merge_tests {
         assignment_map.insert(Direction::Out.into(), vertex_b.id().into());
         assignment_map.insert(T::Label.into(), expected_edge_label.into());
 
-        let anonymous_merge_e_properties = g
-            .inject(1)
-            .unfold()
-            .coalesce::<Edge, _>([__.merge_e(assignment_map)])
-            .element_map(())
-            .next()
-            .expect("Should get a response")
-            .expect("Should return a edge properties");
+        let mut attempt = 0;
+        let anonymous_merge_e_properties = loop {
+            attempt += 1;
+            let response = g
+                .inject(1)
+                .unfold()
+                .coalesce::<Edge, _>([__.merge_e(assignment_map.clone())])
+                .element_map(())
+                .next();
+            if response.is_ok() {
+                break response;
+            } else if attempt > 10 {
+                std::panic!("mergeE vertices not observed before attempt exhaustion")
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        .expect("Should get a response")
+        .expect("Should return a edge properties");
 
         let incoming_vertex: &Map = anonymous_merge_e_properties
             .get(Direction::In)

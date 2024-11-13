@@ -9,6 +9,7 @@ mod aio {
 
     use rstest::*;
     use rstest_reuse::{self, *};
+    use serial_test::serial;
 
     use crate::common;
 
@@ -63,6 +64,7 @@ mod aio {
     }
 
     #[apply(common::serializers)]
+    #[serial(test_session_empty_query)]
     #[cfg(feature = "async-std-runtime")]
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     async fn test_session_empty_query(protocol: IoProtocol) {
@@ -118,6 +120,7 @@ mod aio {
     }
 
     #[apply(common::serializers)]
+    #[serial(test_partial_content)]
     #[cfg(feature = "async-std-runtime")]
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     async fn test_partial_content(protocol: IoProtocol) {
