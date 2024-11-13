@@ -9,7 +9,7 @@ use gremlin_client::structure::{
 };
 
 use gremlin_client::{
-    utils, BorrowFromGValue, GKey, GValue, GremlinClient, GremlinError, IoProtocol,
+    utils, BorrowFromGValue, GKey, GValue, GremlinError, IoProtocol,
 };
 
 mod common;
@@ -24,13 +24,6 @@ use common::io::{
     graph_serializer,
 };
 
-#[template]
-#[rstest]
-#[case::graphson_v2(graph_serializer(IoProtocol::GraphSONV2))]
-#[case::graphson_v3(graph_serializer(IoProtocol::GraphSONV3))]
-#[case::graph_binary_v1(graph_serializer(IoProtocol::GraphBinaryV1))]
-fn serializers(#[case] client: GremlinClient) {}
-
 #[cfg(feature = "merge_tests")]
 mod merge_tests {
     use super::*;
@@ -41,17 +34,15 @@ mod merge_tests {
     };
     use std::collections::HashMap;
 
-    //GraphSONV2 doesn't appear to support merge steps, so omit it from
-    //being one of the serializers tested for those tests
-    #[template]
-    #[rstest]
-    #[case::graphson_v3(graph_serializer(IoProtocol::GraphSONV3))]
-    #[case::graph_binary_v1(graph_serializer(IoProtocol::GraphBinaryV1))]
-    fn merge_capable_serializers(#[case] client: GremlinClient) {}
-
-    #[apply(merge_capable_serializers)]
+    #[apply(common::serializers)]
     #[serial(test_merge_v_no_options)]
-    fn test_merge_v_no_options(client: GremlinClient) {
+    fn test_merge_v_no_options(protocol: IoProtocol) {
+        if protocol == IoProtocol::GraphSONV2 {
+            //GraphSONV2 doesn't support the non-string key of the merge step,
+            //so skip it in testing
+            return;
+        }
+        let client = graph_serializer(protocol);
         let test_vertex_label = "test_merge_v_no_options";
         drop_vertices(&client, test_vertex_label)
             .expect("Failed to drop vertices in case of rerun");
@@ -84,9 +75,15 @@ mod merge_tests {
         assert_map_property(&vertex_properties, "propertyKey", "propertyValue");
     }
 
-    #[apply(merge_capable_serializers)]
+    #[apply(common::serializers)]
     #[serial(test_merge_v_options)]
-    fn test_merge_v_options(client: GremlinClient) {
+    fn test_merge_v_options(protocol: IoProtocol) {
+        if protocol == IoProtocol::GraphSONV2 {
+            //GraphSONV2 doesn't support the non-string key of the merge step,
+            //so skip it in testing
+            return;
+        }
+        let client = graph_serializer(protocol);
         let expected_label = "test_merge_v_options";
         drop_vertices(&client, expected_label).expect("Failed to drop vertices");
         let g = traversal().with_remote(client);
@@ -135,9 +132,15 @@ mod merge_tests {
         assert_map_property(&on_match_vertex_map, prop_key, expected_on_match_prop_value);
     }
 
-    #[apply(merge_capable_serializers)]
+    #[apply(common::serializers)]
     #[serial(test_merge_v_start_step)]
-    fn test_merge_v_start_step(client: GremlinClient) {
+    fn test_merge_v_start_step(protocol: IoProtocol) {
+        if protocol == IoProtocol::GraphSONV2 {
+            //GraphSONV2 doesn't support the non-string key of the merge step,
+            //so skip it in testing
+            return;
+        }
+        let client = graph_serializer(protocol);
         let expected_label = "test_merge_v_start_step";
         drop_vertices(&client, &expected_label).expect("Failed to drop vertiecs");
         let g = traversal().with_remote(client);
@@ -152,9 +155,15 @@ mod merge_tests {
         assert_eq!(expected_label, actual_vertex.label())
     }
 
-    #[apply(merge_capable_serializers)]
+    #[apply(common::serializers)]
     #[serial(test_merge_v_anonymous_traversal)]
-    fn test_merge_v_anonymous_traversal(client: GremlinClient) {
+    fn test_merge_v_anonymous_traversal(protocol: IoProtocol) {
+        if protocol == IoProtocol::GraphSONV2 {
+            //GraphSONV2 doesn't support the non-string key of the merge step,
+            //so skip it in testing
+            return;
+        }
+        let client = graph_serializer(protocol);
         let expected_label = "test_merge_v_anonymous_traversal";
         drop_vertices(&client, &expected_label).expect("Failed to drop vertiecs");
         let g = traversal().with_remote(client);
@@ -170,9 +179,15 @@ mod merge_tests {
         assert_eq!(expected_label, actual_vertex.label())
     }
 
-    #[apply(merge_capable_serializers)]
+    #[apply(common::serializers)]
     #[serial(test_merge_e_start_step)]
-    fn test_merge_e_start_step(client: GremlinClient) {
+    fn test_merge_e_start_step(protocol: IoProtocol) {
+        if protocol == IoProtocol::GraphSONV2 {
+            //GraphSONV2 doesn't support the non-string key of the merge step,
+            //so skip it in testing
+            return;
+        }
+        let client = graph_serializer(protocol);
         let expected_vertex_label = "test_merge_e_start_step_vertex";
         let expected_edge_label = "test_merge_e_start_step_edge";
         let expected_edge_property_key = "test_merge_e_start_step_edge_prop";
@@ -239,9 +254,15 @@ mod merge_tests {
         assert_eq!(outgoing_vertex_id, &vertex_b.id().to_gvalue());
     }
 
-    #[apply(merge_capable_serializers)]
+    #[apply(common::serializers)]
     #[serial(test_merge_e_no_options)]
-    fn test_merge_e_no_options(client: GremlinClient) {
+    fn test_merge_e_no_options(protocol: IoProtocol) {
+        if protocol == IoProtocol::GraphSONV2 {
+            //GraphSONV2 doesn't support the non-string key of the merge step,
+            //so skip it in testing
+            return;
+        }
+        let client = graph_serializer(protocol);
         let expected_vertex_label = "test_merge_e_no_options_vertex";
         let expected_edge_label = "test_merge_e_no_options_edge";
         let expected_edge_property_key = "test_merge_e_no_options_edge_prop";
@@ -310,9 +331,15 @@ mod merge_tests {
         assert_eq!(outgoing_vertex_id, &vertex_b.id().to_gvalue());
     }
 
-    #[apply(merge_capable_serializers)]
+    #[apply(common::serializers)]
     #[serial(test_merge_e_options)]
-    fn test_merge_e_options(client: GremlinClient) {
+    fn test_merge_e_options(protocol: IoProtocol) {
+        if protocol == IoProtocol::GraphSONV2 {
+            //GraphSONV2 doesn't support the non-string key of the merge step,
+            //so skip it in testing
+            return;
+        }
+        let client = graph_serializer(protocol);
         let expected_vertex_label = "test_merge_e_options_vertex";
         let expected_edge_label = "test_merge_e_options_edge";
         let expected_edge_property_key = "test_merge_e_options_edge_prop";
@@ -380,9 +407,15 @@ mod merge_tests {
         );
     }
 
-    #[apply(merge_capable_serializers)]
+    #[apply(common::serializers)]
     #[serial(test_merge_e_anonymous_traversal)]
-    fn test_merge_e_anonymous_traversal(client: GremlinClient) {
+    fn test_merge_e_anonymous_traversal(protocol: IoProtocol) {
+        if protocol == IoProtocol::GraphSONV2 {
+            //GraphSONV2 doesn't support the non-string key of the merge step,
+            //so skip it in testing
+            return;
+        }
+        let client = graph_serializer(protocol);
         let expected_vertex_label = "test_merge_e_options_vertex";
         let expected_edge_label = "test_merge_e_options_edge";
         drop_vertices(&client, &expected_vertex_label).expect("Failed to drop vertiecs");
@@ -437,9 +470,15 @@ mod merge_tests {
         assert_eq!(outgoing_vertex_id, &vertex_b.id().to_gvalue());
     }
 
-    #[apply(merge_capable_serializers)]
+    #[apply(common::serializers)]
     #[serial(test_merge_v_into_merge_e)]
-    fn test_merge_v_into_merge_e(client: GremlinClient) {
+    fn test_merge_v_into_merge_e(protocol: IoProtocol) {
+        if protocol == IoProtocol::GraphSONV2 {
+            //GraphSONV2 doesn't support the non-string key of the merge step,
+            //so skip it in testing
+            return;
+        }
+        let client = graph_serializer(protocol);
         //Based on the reference doc's combo example
 
         let expected_vertex_label = "test_merge_v_into_merge_e_vertex";
@@ -505,9 +544,10 @@ mod merge_tests {
     }
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_simple_vertex_traversal)]
-fn test_simple_vertex_traversal(client: GremlinClient) {
+fn test_simple_vertex_traversal(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let g = traversal().with_remote(client);
 
     let results = g.v(()).to_list().unwrap();
@@ -515,9 +555,10 @@ fn test_simple_vertex_traversal(client: GremlinClient) {
     assert!(results.len() > 0);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_inject)]
-fn test_inject(client: GremlinClient) {
+fn test_inject(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let g = traversal().with_remote(client);
     let expected_value = "foo";
     let response: String = g
@@ -530,9 +571,10 @@ fn test_inject(client: GremlinClient) {
     assert_eq!(expected_value, response);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_simple_vertex_traversal_with_id)]
-fn test_simple_vertex_traversal_with_id(client: GremlinClient) {
+fn test_simple_vertex_traversal_with_id(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let vertex = create_vertex(&client, "Traversal");
 
     let g = traversal().with_remote(client);
@@ -544,9 +586,10 @@ fn test_simple_vertex_traversal_with_id(client: GremlinClient) {
     assert_eq!(vertex.id(), results[0].id());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_simple_vertex_traversal_with_multiple_id)]
-fn test_simple_vertex_traversal_with_multiple_id(client: GremlinClient) {
+fn test_simple_vertex_traversal_with_multiple_id(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_simple_vertex_traversal").unwrap();
 
     let vertex = create_vertex_with_label(&client, "test_simple_vertex_traversal", "Traversal");
@@ -562,9 +605,10 @@ fn test_simple_vertex_traversal_with_multiple_id(client: GremlinClient) {
     assert_eq!(vertex2.id(), results[1].id());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_simple_vertex_traversal_with_label)]
-fn test_simple_vertex_traversal_with_label(client: GremlinClient) {
+fn test_simple_vertex_traversal_with_label(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_simple_vertex_traversal_with_label").unwrap();
 
     let vertex = create_vertex_with_label(
@@ -586,9 +630,10 @@ fn test_simple_vertex_traversal_with_label(client: GremlinClient) {
     assert_eq!(vertex.id(), results[0].id());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_simple_vertex_traversal_with_label_and_has)]
-fn test_simple_vertex_traversal_with_label_and_has(client: GremlinClient) {
+fn test_simple_vertex_traversal_with_label_and_has(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_simple_vertex_traversal_with_label_and_has").unwrap();
 
     let vertex = create_vertex_with_label(
@@ -653,9 +698,10 @@ fn test_simple_vertex_traversal_with_label_and_has(client: GremlinClient) {
     assert_eq!(vertex.id(), results[0].id());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_simple_edge_traversal)]
-fn test_simple_edge_traversal(client: GremlinClient) {
+fn test_simple_edge_traversal(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let g = traversal().with_remote(client);
 
     let results = g.e(()).to_list().unwrap();
@@ -663,9 +709,10 @@ fn test_simple_edge_traversal(client: GremlinClient) {
     assert!(results.len() > 0);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_simple_edge_traversal_id)]
-fn test_simple_edge_traversal_id(client: GremlinClient) {
+fn test_simple_edge_traversal_id(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let v = create_vertex(&client, "Traversal");
     let v1 = create_vertex(&client, "Traversal");
 
@@ -680,9 +727,10 @@ fn test_simple_edge_traversal_id(client: GremlinClient) {
     assert_eq!(e.id(), results[0].id());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_simple_edge_traversal_with_label)]
-fn test_simple_edge_traversal_with_label(client: GremlinClient) {
+fn test_simple_edge_traversal_with_label(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_edges(&client, "test_simple_edge_traversal_with_label").unwrap();
 
     let v = create_vertex(&client, "Traversal");
@@ -703,9 +751,10 @@ fn test_simple_edge_traversal_with_label(client: GremlinClient) {
     assert_eq!(e.id(), results[0].id());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_traversal)]
-fn test_traversal(client: GremlinClient) {
+fn test_traversal(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_edges(&client, "test_vertex_out_traversal").unwrap();
 
     let v = create_vertex(&client, "Traversal");
@@ -845,9 +894,10 @@ fn test_traversal(client: GremlinClient) {
     assert_eq!(0, results.len());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_add_v)]
-fn test_add_v(client: GremlinClient) {
+fn test_add_v(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let g = traversal().with_remote(client);
 
     let results = g.add_v("person").to_list().unwrap();
@@ -864,9 +914,10 @@ fn test_add_v(client: GremlinClient) {
     assert_eq!("vertex", results[0].label());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_add_v_with_properties)]
-fn test_add_v_with_properties(client: GremlinClient) {
+fn test_add_v_with_properties(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let g = traversal().with_remote(client.clone());
 
     let results = g
@@ -909,9 +960,10 @@ fn test_add_v_with_properties(client: GremlinClient) {
     );
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_add_v_with_property_many)]
-fn test_add_v_with_property_many(client: GremlinClient) {
+fn test_add_v_with_property_many(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_add_v_with_property_many").unwrap();
 
     let g = traversal().with_remote(client.clone());
@@ -958,9 +1010,10 @@ fn test_add_v_with_property_many(client: GremlinClient) {
     );
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_has_many)]
-fn test_has_many(client: GremlinClient) {
+fn test_has_many(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_has_many").unwrap();
 
     let g = traversal().with_remote(client.clone());
@@ -990,9 +1043,10 @@ fn test_has_many(client: GremlinClient) {
     assert_eq!(results.len(), 1);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_add_e)]
-fn test_add_e(client: GremlinClient) {
+fn test_add_e(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let g = traversal().with_remote(client.clone());
 
     let v = g
@@ -1053,9 +1107,10 @@ fn test_add_e(client: GremlinClient) {
     assert_eq!("knows", edges[0].label());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_label_step)]
-fn test_label_step(client: GremlinClient) {
+fn test_label_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let vertex = create_vertex(&client, "Traversal");
 
     let g = traversal().with_remote(client);
@@ -1067,9 +1122,10 @@ fn test_label_step(client: GremlinClient) {
     assert_eq!("person", results[0]);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_properties_step)]
-fn test_properties_step(client: GremlinClient) {
+fn test_properties_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let vertex = create_vertex(&client, "Traversal");
 
     let g = traversal().with_remote(client);
@@ -1091,9 +1147,10 @@ fn test_properties_step(client: GremlinClient) {
     assert_eq!(0, results.len());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_property_map)]
-fn test_property_map(client: GremlinClient) {
+fn test_property_map(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let vertex = create_vertex(&client, "Traversal");
 
     let g = traversal().with_remote(client);
@@ -1137,9 +1194,10 @@ fn test_property_map(client: GremlinClient) {
     assert_eq!(0, properties.len());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_values)]
-fn test_values(client: GremlinClient) {
+fn test_values(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let vertex = create_vertex(&client, "Traversal");
 
     let g = traversal().with_remote(client);
@@ -1165,9 +1223,10 @@ fn test_values(client: GremlinClient) {
     assert_eq!(0, results.len());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_value_map)]
-fn test_value_map(client: GremlinClient) {
+fn test_value_map(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let g = traversal().with_remote(client);
 
     let vertices = g
@@ -1225,9 +1284,10 @@ fn test_value_map(client: GremlinClient) {
     assert_eq!(true, results[0].get("name").is_some());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_unwrap_map)]
-fn test_unwrap_map(client: GremlinClient) {
+fn test_unwrap_map(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let g = traversal().with_remote(client);
 
     let vertices = g
@@ -1249,9 +1309,10 @@ fn test_unwrap_map(client: GremlinClient) {
     assert_eq!(label, Some(vertex.label()));
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_element_map)]
-fn test_element_map(client: GremlinClient) {
+fn test_element_map(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let g = traversal().with_remote(client);
 
     let vertices = g
@@ -1314,9 +1375,10 @@ fn test_element_map(client: GremlinClient) {
     assert_eq!(true, results[0].get("name").is_some());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_count)]
-fn test_count(client: GremlinClient) {
+fn test_count(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let vertex = create_vertex_with_label(&client, "test_count", "Count");
 
     let g = traversal().with_remote(client);
@@ -1330,9 +1392,10 @@ fn test_count(client: GremlinClient) {
     assert_eq!(&1, value);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_group_count_step)]
-fn test_group_count_step(client: GremlinClient) {
+fn test_group_count_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_group_count").unwrap();
 
     let vertex = create_vertex_with_label(&client, "test_group_count", "Count");
@@ -1403,9 +1466,10 @@ fn test_group_count_step(client: GremlinClient) {
     assert_eq!(&1, value["test_group_count"].get::<i64>().unwrap());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_group_by_step)]
-fn test_group_by_step(client: GremlinClient) {
+fn test_group_by_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_group_by_step").unwrap();
 
     create_vertex_with_label(&client, "test_group_by_step", "Count");
@@ -1458,9 +1522,10 @@ fn test_group_by_step(client: GremlinClient) {
     assert_eq!(&1, value["test_group_by_step"].get::<i64>().unwrap());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_select_step)]
-fn test_select_step(client: GremlinClient) {
+fn test_select_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_select_step").unwrap();
 
     create_vertex_with_label(&client, "test_select_step", "Count");
@@ -1483,9 +1548,10 @@ fn test_select_step(client: GremlinClient) {
     assert_eq!(&1, value.get::<i64>().unwrap());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_fold_step)]
-fn test_fold_step(client: GremlinClient) {
+fn test_fold_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_fold_step").unwrap();
 
     create_vertex_with_label(&client, "test_fold_step", "Count");
@@ -1507,9 +1573,10 @@ fn test_fold_step(client: GremlinClient) {
     assert_eq!("Count", value[0].get::<String>().unwrap());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_unfold_step)]
-fn test_unfold_step(client: GremlinClient) {
+fn test_unfold_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_unfold_step").unwrap();
 
     let vertex = create_vertex_with_label(&client, "test_unfold_step", "Count");
@@ -1537,9 +1604,10 @@ fn test_unfold_step(client: GremlinClient) {
     );
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_path_step)]
-fn test_path_step(client: GremlinClient) {
+fn test_path_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_path_step").unwrap();
 
     let v = create_vertex_with_label(&client, "test_path_step", "Count");
@@ -1560,9 +1628,10 @@ fn test_path_step(client: GremlinClient) {
     assert_eq!(v.id(), value.objects()[0].get::<Vertex>().unwrap().id());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_limit_step)]
-fn test_limit_step(client: GremlinClient) {
+fn test_limit_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_limit_step").unwrap();
 
     create_vertex_with_label(&client, "test_limit_step", "Count");
@@ -1580,9 +1649,10 @@ fn test_limit_step(client: GremlinClient) {
     assert_eq!(1, results.len());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_dedup_step)]
-fn test_dedup_step(client: GremlinClient) {
+fn test_dedup_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_limit_step").unwrap();
 
     create_vertex_with_label(&client, "test_limit_step", "Count");
@@ -1601,9 +1671,10 @@ fn test_dedup_step(client: GremlinClient) {
     assert_eq!(1, results.len());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_numerical_steps)]
-fn test_numerical_steps(client: GremlinClient) {
+fn test_numerical_steps(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_numerical_steps").unwrap();
 
     let g = traversal().with_remote(client);
@@ -1672,9 +1743,10 @@ fn test_numerical_steps(client: GremlinClient) {
     assert_eq!(&20, results[0].get::<i32>().unwrap());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_has_with_p_steps)]
-fn test_has_with_p_steps(client: GremlinClient) {
+fn test_has_with_p_steps(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_has_with_p_steps").unwrap();
 
     let g = traversal().with_remote(client);
@@ -1747,9 +1819,10 @@ fn test_has_with_p_steps(client: GremlinClient) {
     assert_eq!(&20, results[0].get::<i32>().unwrap());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_has_with_text_p_step)]
-fn test_has_with_text_p_step(client: GremlinClient) {
+fn test_has_with_text_p_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_has_with_text_p_step").unwrap();
 
     let g = traversal().with_remote(client);
@@ -1813,9 +1886,10 @@ fn test_has_with_text_p_step(client: GremlinClient) {
     assert_eq!(2, results.len());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(where_step_test)]
-fn where_step_test(client: GremlinClient) {
+fn where_step_test(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "where_step_test").unwrap();
 
     let g = traversal().with_remote(client);
@@ -1838,9 +1912,10 @@ fn where_step_test(client: GremlinClient) {
     assert_eq!(v[0].id(), results[0].id());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(not_step_test)]
-fn not_step_test(client: GremlinClient) {
+fn not_step_test(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "not_step_test").unwrap();
 
     let g = traversal().with_remote(client);
@@ -1860,9 +1935,10 @@ fn not_step_test(client: GremlinClient) {
     assert_eq!(0, results.len());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(order_step_test)]
-fn order_step_test(client: GremlinClient) {
+fn order_step_test(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "order_step_test").unwrap();
 
     let g = traversal().with_remote(client);
@@ -1903,9 +1979,10 @@ fn order_step_test(client: GremlinClient) {
     assert_eq!("b", results[0].get::<String>().unwrap());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(match_step_test)]
-fn match_step_test(client: GremlinClient) {
+fn match_step_test(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "match_step_test").unwrap();
 
     drop_edges(&client, "match_step_test_edge").unwrap();
@@ -1964,9 +2041,10 @@ fn match_step_test(client: GremlinClient) {
     assert_eq!(&v3[0], first["c"].get::<Vertex>().unwrap());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(drop_step_test)]
-fn drop_step_test(client: GremlinClient) {
+fn drop_step_test(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "drop_step_test").unwrap();
 
     let g = traversal().with_remote(client);
@@ -1996,9 +2074,10 @@ fn drop_step_test(client: GremlinClient) {
     assert_eq!(false, results);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(or_step_test)]
-fn or_step_test(client: GremlinClient) {
+fn or_step_test(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "or_step_test").unwrap();
 
     let g = traversal().with_remote(client);
@@ -2036,9 +2115,10 @@ fn or_step_test(client: GremlinClient) {
     assert_eq!(result.len(), 2);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(iter_terminator_test)]
-fn iter_terminator_test(client: GremlinClient) {
+fn iter_terminator_test(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "iter_terminator_test").unwrap();
 
     let g = traversal().with_remote(client);
@@ -2064,9 +2144,10 @@ fn iter_terminator_test(client: GremlinClient) {
     assert_eq!(2, results.len())
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_select_pop)]
-fn test_select_pop(client: GremlinClient) {
+fn test_select_pop(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_select_pop").unwrap();
     drop_vertices(&client, "test_select_pop_child").unwrap();
 
@@ -2152,9 +2233,10 @@ fn test_select_pop(client: GremlinClient) {
     assert_eq!(results.len(), 1);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_repeat_until_loops_loops)]
-fn test_repeat_until_loops_loops(client: GremlinClient) {
+fn test_repeat_until_loops_loops(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_repeat_until_loops").unwrap();
     drop_vertices(&client, "test_repeat_until_loops_child").unwrap();
 
@@ -2192,9 +2274,10 @@ fn test_repeat_until_loops_loops(client: GremlinClient) {
     assert_eq!(results[0], e2[0]);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_simple_path)]
-fn test_simple_vertex_property(client: GremlinClient) {
+fn test_simple_vertex_property(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_simple_vertex_property").unwrap();
 
     let g = traversal().with_remote(client);
@@ -2211,9 +2294,10 @@ fn test_simple_vertex_property(client: GremlinClient) {
     assert_eq!(actual_property, "a");
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_simple_path)]
-fn test_simple_path(client: GremlinClient) {
+fn test_simple_path(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_simple_path").unwrap();
     drop_vertices(&client, "test_simple_path_child").unwrap();
 
@@ -2252,9 +2336,10 @@ fn test_simple_path(client: GremlinClient) {
     assert_eq!(results[0], e2[0]);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_sample)]
-fn test_sample(client: GremlinClient) {
+fn test_sample(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_sample").unwrap();
     drop_vertices(&client, "test_sample_child").unwrap();
 
@@ -2284,9 +2369,10 @@ fn test_sample(client: GremlinClient) {
     assert_eq!(results.len(), 1);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_local)]
-fn test_local(client: GremlinClient) {
+fn test_local(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_local").unwrap();
     drop_vertices(&client, "test_local_child").unwrap();
     drop_vertices(&client, "test_local_child_child").unwrap();
@@ -2359,9 +2445,10 @@ fn test_local(client: GremlinClient) {
     assert_eq!(results.len(), 2);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_side_effect)]
-fn test_side_effect(client: GremlinClient) {
+fn test_side_effect(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let test_vertex_label = "test_side_effect";
     let expected_side_effect_key = "prop_key";
     let expected_side_effect_value = "prop_val";
@@ -2388,9 +2475,10 @@ fn test_side_effect(client: GremlinClient) {
     );
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_anonymous_traversal_properties_drop)]
-fn test_anonymous_traversal_properties_drop(client: GremlinClient) {
+fn test_anonymous_traversal_properties_drop(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let test_vertex_label = "test_anonymous_traversal_properties_drop";
     let pre_drop_prop_key = "pre_drop_prop_key";
     let expected_prop_value = "prop_val";
@@ -2446,9 +2534,10 @@ fn test_anonymous_traversal_properties_drop(client: GremlinClient) {
     );
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_by_columns)]
-fn test_by_columns(client: GremlinClient) {
+fn test_by_columns(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let test_vertex_label = "test_by_columns";
     let expected_side_effect_key_a = "prop_key_a";
     let expected_side_effect_value_a = "prop_val_a";
@@ -2502,9 +2591,10 @@ fn test_by_columns(client: GremlinClient) {
     );
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_property_cardinality)]
-fn test_property_cardinality(client: GremlinClient) {
+fn test_property_cardinality(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_property_cardinality").unwrap();
 
     let g = traversal().with_remote(client);
@@ -2532,9 +2622,10 @@ fn test_property_cardinality(client: GremlinClient) {
     assert_eq!(1, new_v["name"].get::<List>().unwrap().len());
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_choose)]
-fn test_choose(client: GremlinClient) {
+fn test_choose(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_choose").unwrap();
 
     let g = traversal().with_remote(client);
@@ -2573,9 +2664,10 @@ fn test_choose(client: GremlinClient) {
     assert_eq!(success_vertices.is_some(), true);
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_choose_by_literal_options)]
-fn test_choose_by_literal_options(client: GremlinClient) {
+fn test_choose_by_literal_options(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     let g = traversal().with_remote(client);
 
     let choosen_literal_a = g
@@ -2601,9 +2693,10 @@ fn test_choose_by_literal_options(client: GremlinClient) {
     assert_eq!(choosen_literal_b, Some("option-b".into()));
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial()]
-fn test_coalesce(client: GremlinClient) {
+fn test_coalesce(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     use gremlin_client::GValue;
 
     drop_vertices(&client, "test_coalesce").unwrap();
@@ -2636,9 +2729,10 @@ fn test_coalesce(client: GremlinClient) {
     assert!(values.contains(&String::from("b")));
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_coalesce_unfold)]
-fn test_coalesce_unfold(client: GremlinClient) {
+fn test_coalesce_unfold(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_coalesce_unfold").unwrap();
 
     let g = traversal().with_remote(client);
@@ -2692,9 +2786,10 @@ fn test_coalesce_unfold(client: GremlinClient) {
     );
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_none_step)]
-fn test_none_step(client: GremlinClient) {
+fn test_none_step(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     drop_vertices(&client, "test_none_step").unwrap();
 
     let g = traversal().with_remote(client);
@@ -2750,10 +2845,11 @@ where
         .transpose()
 }
 
-#[apply(serializers)]
+#[apply(common::serializers)]
 #[serial(test_traversal_vertex_mapping)]
 #[cfg(feature = "derive")]
-fn test_traversal_vertex_mapping(client: GremlinClient) {
+fn test_traversal_vertex_mapping(protocol: IoProtocol) {
+    let client = graph_serializer(protocol);
     use chrono::{DateTime, TimeZone, Utc};
     use gremlin_client::derive::FromGMap;
     use std::convert::TryFrom;
