@@ -928,6 +928,7 @@ fn test_group_count_edge(protocol: IoProtocol) {
 fn test_vertex_mapping(protocol: IoProtocol) {
     use gremlin_client::derive::FromGValue;
     use std::convert::TryFrom;
+    let client = graph_serializer(protocol.clone());
 
     let q = r#"
     g.addV('person')

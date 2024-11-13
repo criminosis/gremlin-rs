@@ -1,15 +1,11 @@
+use std::convert::TryInto;
+
 use gremlin_client::{structure::T, Map};
 use rstest_reuse::template;
 
 pub fn assert_map_property(element_map: &Map, expected_key: &str, expected_value: &str) {
     let actual_prop_value: &String = element_map
         .get(expected_key)
-        .or(match expected_key {
-            "id" => element_map.get(T::Id),
-            "key" => element_map.get(T::Key),
-            "label" => element_map.get(T::Label),
-            _ => None,
-        })
         .unwrap_or_else(|| panic!("Didn't have expected key {}", expected_key))
         .get()
         .expect("Should be String");

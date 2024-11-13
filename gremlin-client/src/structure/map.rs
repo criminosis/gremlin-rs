@@ -86,7 +86,28 @@ impl Map {
     where
         T: Into<GKey>,
     {
-        self.0.get(&key.into())
+        let key = key.into();
+        self.0
+            .get(&key)
+            .or_else(|| self.backwards_compatability_get(key))
+    }
+
+    fn backwards_compatability_get(&self, key: GKey) -> Option<&GValue> {
+        //The GraphBinary protocol may be returning properties
+        //as the distinct "T" type (T::Id) whereas older protocols
+        //would have just sent them as GKey::String("id"), etc
+        //This function is intended as a fallback for backwards compatability that if a caller
+        //requests a get or try_get for "id" that we also then attempt it T::Id or one of its siblings
+        //This also maintains the representation needed for the derive crate to find
+        //the types since the derive crate can't discriminate between a vertex property called "id"
+        //or a T::Id since they're both just called "id"
+        match key {
+            GKey::String(string) => match TryInto::<T>::try_into(string.as_str()) {
+                Ok(fallback_key) => self.0.get(&fallback_key.into()),
+                Err(_) => None,
+            },
+            _ => None,
+        }
     }
 
     ///Returns try_get and conversion
@@ -95,8 +116,10 @@ impl Map {
         K: Into<GKey>,
         V: std::convert::TryFrom<GValue, Error = GremlinError>,
     {
+        let key = key.into();
         self.0
-            .get(&key.into())
+            .get(&key)
+            .or_else(|| self.backwards_compatability_get(key))
             .cloned()
             .or_else(|| Some(GValue::Null))
             .map(V::try_from)

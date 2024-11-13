@@ -236,7 +236,6 @@ mod merge_tests {
 
         let incoming_vertex_id = incoming_vertex
             .get("id")
-            .or(incoming_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(incoming_vertex_id, &vertex_a.id().to_gvalue());
 
@@ -247,7 +246,6 @@ mod merge_tests {
             .unwrap();
         let outgoing_vertex_id = outgoing_vertex
             .get("id")
-            .or(outgoing_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(outgoing_vertex_id, &vertex_b.id().to_gvalue());
     }
@@ -313,7 +311,6 @@ mod merge_tests {
             .unwrap();
         let incoming_vertex_id = incoming_vertex
             .get("id")
-            .or(incoming_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(incoming_vertex_id, &vertex_a.id().to_gvalue());
 
@@ -324,7 +321,6 @@ mod merge_tests {
             .unwrap();
         let outgoing_vertex_id = outgoing_vertex
             .get("id")
-            .or(outgoing_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(outgoing_vertex_id, &vertex_b.id().to_gvalue());
     }
@@ -373,30 +369,19 @@ mod merge_tests {
         injection_map.insert("match_params".into(), on_match_map.into());
 
         let do_merge_edge = |g: GraphTraversalSource<SyncTerminator>| -> Map {
-            let mut attempt = 0;
-            loop {
-                attempt += 1;
-                let response = g
-                    .inject(vec![injection_map.clone().into()])
-                    .unfold()
-                    .as_("payload")
-                    .merge_e(__.select("payload").select("merge_params"))
-                    .option((
-                        Merge::OnCreate,
-                        __.select("payload").select("create_params"),
-                    ))
-                    .option((Merge::OnMatch, __.select("payload").select("match_params")))
-                    .element_map(())
-                    .next();
-                if response.is_ok() {
-                    break response;
-                } else if attempt > 10 {
-                    std::panic!("mergeE vertices not observed before attempt exhaustion")
-                }
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-            .expect("Should get a response")
-            .expect("Should return a edge properties")
+            g.inject(vec![injection_map.clone().into()])
+                .unfold()
+                .as_("payload")
+                .merge_e(__.select("payload").select("merge_params"))
+                .option((
+                    Merge::OnCreate,
+                    __.select("payload").select("create_params"),
+                ))
+                .option((Merge::OnMatch, __.select("payload").select("match_params")))
+                .element_map(())
+                .next()
+                .expect("Should get a response")
+                .expect("Should return a edge properties")
         };
 
         let on_create_edge_properties = do_merge_edge(g.clone());
@@ -425,8 +410,8 @@ mod merge_tests {
             return;
         }
         let client = graph_serializer(protocol);
-        let expected_vertex_label = "test_merge_e_options_vertex";
-        let expected_edge_label = "test_merge_e_options_edge";
+        let expected_vertex_label = "test_merge_e_anonymous_traversal_vertex";
+        let expected_edge_label = "test_merge_e_anonymous_traversal_edge";
         drop_vertices(&client, &expected_vertex_label).expect("Failed to drop vertiecs");
         let g = traversal().with_remote(client);
 
@@ -447,24 +432,14 @@ mod merge_tests {
         assignment_map.insert(Direction::Out.into(), vertex_b.id().into());
         assignment_map.insert(T::Label.into(), expected_edge_label.into());
 
-        let mut attempt = 0;
-        let anonymous_merge_e_properties = loop {
-            attempt += 1;
-            let response = g
-                .inject(1)
-                .unfold()
-                .coalesce::<Edge, _>([__.merge_e(assignment_map.clone())])
-                .element_map(())
-                .next();
-            if response.is_ok() {
-                break response;
-            } else if attempt > 10 {
-                std::panic!("mergeE vertices not observed before attempt exhaustion")
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        .expect("Should get a response")
-        .expect("Should return a edge properties");
+        let anonymous_merge_e_properties = g
+            .inject(1)
+            .unfold()
+            .coalesce::<Edge, _>([__.merge_e(assignment_map.clone())])
+            .element_map(())
+            .next()
+            .expect("Should get a response")
+            .expect("Should return a edge properties");
 
         let incoming_vertex: &Map = anonymous_merge_e_properties
             .get(Direction::In)
@@ -473,7 +448,6 @@ mod merge_tests {
             .unwrap();
         let incoming_vertex_id = incoming_vertex
             .get("id")
-            .or(incoming_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(incoming_vertex_id, &vertex_a.id().to_gvalue());
 
@@ -484,7 +458,6 @@ mod merge_tests {
             .unwrap();
         let outgoing_vertex_id = outgoing_vertex
             .get("id")
-            .or(outgoing_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(outgoing_vertex_id, &vertex_b.id().to_gvalue());
     }
@@ -544,7 +517,6 @@ mod merge_tests {
             .unwrap();
         let brandy_vertex_id = brandy_vertex
             .get("id")
-            .or(brandy_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(*brandy_vertex_id, GValue::Int64(expected_brandy_id));
 
@@ -555,7 +527,6 @@ mod merge_tests {
             .unwrap();
         let toby_vertex_id = toby_vertex
             .get("id")
-            .or(toby_vertex.get(T::Id))
             .expect("Should have returned vertex id");
         assert_eq!(*toby_vertex_id, GValue::Int64(expected_toby_id));
 
@@ -1295,11 +1266,8 @@ fn test_value_map(protocol: IoProtocol) {
         Some("test".to_owned()).as_ref(),
         get_map(&value, "name").unwrap()
     );
-    assert!(results[0].get("id").or(results[0].get(T::Id)).is_some());
-    assert!(results[0]
-        .get("label")
-        .or(results[0].get(T::Label))
-        .is_some());
+    assert!(results[0].get("id").is_some());
+    assert!(results[0].get("label").is_some());
     assert_eq!(true, results[0].get("name").is_some());
 }
 
@@ -1368,11 +1336,8 @@ fn test_element_map(protocol: IoProtocol) {
     );
     assert_eq!(Some(vertex.label()), get_map_label(&value).unwrap());
     assert_eq!(2, results[0].len());
-    assert!(results[0].get("id").or(results[0].get(T::Id)).is_some());
-    assert!(results[0]
-        .get("label")
-        .or(results[0].get(T::Label))
-        .is_some());
+    assert!(results[0].get("id").is_some());
+    assert!(results[0].get("label").is_some());
 
     let results = g.v(vertex.id()).element_map(()).to_list().unwrap();
     let value = &results[0];
@@ -1386,11 +1351,8 @@ fn test_element_map(protocol: IoProtocol) {
         Some("test".to_owned()).as_ref(),
         get_map(&value, "name").unwrap()
     );
-    assert!(results[0].get("id").or(results[0].get(T::Id)).is_some());
-    assert!(results[0]
-        .get("label")
-        .or(results[0].get(T::Label))
-        .is_some());
+    assert!(results[0].get("id").is_some());
+    assert!(results[0].get("label").is_some());
     assert_eq!(true, results[0].get("name").is_some());
 }
 
@@ -2520,10 +2482,7 @@ fn test_anonymous_traversal_properties_drop(protocol: IoProtocol) {
     //Make sure the property was assigned
     assert_map_property(&element_map, pre_drop_prop_key, expected_prop_value);
 
-    let created_vertex_id = element_map
-        .get("id")
-        .or(element_map.get(T::Id))
-        .expect("Should have id property");
+    let created_vertex_id = element_map.get("id").expect("Should have id property");
     let GValue::Int64(id) = created_vertex_id else {
         panic!("Not expected id type");
     };
@@ -2871,6 +2830,7 @@ fn test_traversal_vertex_mapping(protocol: IoProtocol) {
     let client = graph_serializer(protocol);
     use chrono::{DateTime, TimeZone, Utc};
     use gremlin_client::derive::FromGMap;
+    use gremlin_client::process::traversal::{Bytecode, TraversalBuilder};
     use std::convert::TryFrom;
 
     drop_vertices(&client, "test_vertex_mapping").unwrap();
@@ -2894,6 +2854,7 @@ fn test_traversal_vertex_mapping(protocol: IoProtocol) {
 
     #[derive(Debug, PartialEq, FromGMap)]
     struct Person {
+        label: String,
         name: String,
         age: i32,
         time: i64,
@@ -2901,11 +2862,11 @@ fn test_traversal_vertex_mapping(protocol: IoProtocol) {
         uuid: uuid::Uuid,
         optional: Option<String>,
     }
-    let person = Person::try_from(mark.unwrap().unwrap());
-    assert_eq!(person.is_ok(), true);
+    let person = Person::try_from(mark.unwrap().unwrap()).expect("Should get person");
 
     assert_eq!(
         Person {
+            label: String::from("person"),
             name: String::from("Mark"),
             age: 22,
             time: 22,
@@ -2913,6 +2874,6 @@ fn test_traversal_vertex_mapping(protocol: IoProtocol) {
             uuid: uuid,
             optional: None
         },
-        person.unwrap()
+        person
     );
 }
