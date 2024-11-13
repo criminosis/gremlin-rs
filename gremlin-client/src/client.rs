@@ -1,4 +1,3 @@
-use crate::io::IoProtocol;
 use crate::message::Response;
 use crate::pool::GremlinConnectionManager;
 use crate::process::traversal::Bytecode;

@@ -9,15 +9,13 @@ use crate::message::{ReponseStatus, RequestIdV2, Response, ResponseResult};
 use crate::process::traversal::{Order, Scope};
 use crate::structure::{Cardinality, Direction, GValue, Merge, T};
 use graph_binary_v1::GraphBinaryV1Deser;
-use serde::{Deserialize as SerdeDeserialize, Deserializer};
 use serde_derive::Deserialize;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::string::ToString;
 use uuid::Uuid;
 
-use crate::{io::graph_binary_v1::GraphBinaryV1Ser, GKey, GremlinError, GremlinResult, Message};
+use crate::{io::graph_binary_v1::GraphBinaryV1Ser, GremlinError, GremlinResult, Message};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IoProtocol {

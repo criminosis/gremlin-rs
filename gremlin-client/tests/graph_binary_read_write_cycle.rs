@@ -1,12 +1,10 @@
 use std::array::IntoIter;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use common::io::graph_serializer;
 use gremlin_client::{
-    process::traversal::{
-        traversal, Bytecode, GraphTraversal, GraphTraversalSource, Scope, SyncTerminator,
-    },
+    process::traversal::{traversal, GraphTraversalSource, SyncTerminator},
     GValue, IoProtocol,
 };
 use rstest::rstest;
