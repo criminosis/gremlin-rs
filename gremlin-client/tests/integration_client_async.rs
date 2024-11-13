@@ -6,13 +6,15 @@ mod aio {
 
     use gremlin_client::{aio::GremlinClient, ConnectionOptions, GremlinError, TlsOptions};
     use gremlin_client::{Edge, GValue, IoProtocol, Map, Vertex};
-    
+
     use rstest::*;
     use rstest_reuse::{self, *};
 
     use crate::common;
 
-    use super::common::aio::{connect, create_edge, create_vertex, drop_vertices, connect_serializer};
+    use super::common::aio::{
+        connect, connect_serializer, create_edge, create_vertex, drop_vertices,
+    };
     #[cfg(feature = "async-std-runtime")]
     use async_std::prelude::*;
 
