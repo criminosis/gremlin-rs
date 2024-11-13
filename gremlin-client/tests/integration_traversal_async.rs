@@ -6,7 +6,7 @@ mod aio {
     use rstest_reuse::{self, *};
 
     use serial_test::serial;
-    
+
     use gremlin_client::{aio::GremlinClient, process::traversal::traversal};
 
     use super::common::aio::{connect_serializer, create_vertex_with_label, drop_vertices};
@@ -17,7 +17,7 @@ mod aio {
     #[cfg(feature = "tokio-runtime")]
     use tokio_stream::StreamExt;
 
-    use gremlin_client::{Vertex, IoProtocol};
+    use gremlin_client::{IoProtocol, Vertex};
 
     #[rstest]
     #[case::graphson_v2(connect_serializer(IoProtocol::GraphSONV2))]
@@ -27,7 +27,11 @@ mod aio {
     #[cfg_attr(feature = "async-std-runtime", async_std::test)]
     #[cfg_attr(feature = "tokio-runtime", tokio::test)]
     #[serial(test_simple_vertex_traversal_with_multiple_id)]
-    async fn test_simple_vertex_traversal_with_multiple_id(#[future] #[case] client: GremlinClient) {
+    async fn test_simple_vertex_traversal_with_multiple_id(
+        #[future]
+        #[case]
+        client: GremlinClient,
+    ) {
         drop_vertices(&client, "test_simple_vertex_traversal_async")
             .await
             .unwrap();
