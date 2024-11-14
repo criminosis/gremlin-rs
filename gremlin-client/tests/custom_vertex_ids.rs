@@ -10,6 +10,7 @@ use gremlin_client::{
 
 use rstest::*;
 use rstest_reuse::apply;
+use serial_test::serial;
 use uuid::Uuid;
 
 mod common;
@@ -18,6 +19,7 @@ mod common;
 //https://docs.janusgraph.org/advanced-topics/custom-vertex-id/
 
 #[apply(common::serializers)]
+#[serial(jg_throttle)]
 #[cfg(feature = "derive")]
 fn test_mapping_custom_vertex_id(protocol: IoProtocol) {
     if protocol == IoProtocol::GraphSONV2 {
@@ -61,7 +63,7 @@ fn test_mapping_custom_vertex_id(protocol: IoProtocol) {
         uuid: uuid::Uuid,
         optional: Option<String>,
     }
-    let person = Person::try_from(mark.unwrap().unwrap()).expect("Should get person");
+    let person = Person::try_from(mark.unwrap()).expect("Should get person");
 
     assert_eq!(
         Person {
@@ -79,6 +81,7 @@ fn test_mapping_custom_vertex_id(protocol: IoProtocol) {
 }
 
 #[apply(common::serializers)]
+#[serial(jg_throttle)]
 fn test_jg_add_e(protocol: IoProtocol) {
     //It seems JanusGraph differs from the standard Tinkerpop Gremlin Server in how it returns edges
     //JG returns edge properties in the same call if the edge is the terminal type
@@ -124,6 +127,7 @@ fn test_jg_add_e(protocol: IoProtocol) {
 }
 
 #[apply(common::serializers)]
+#[serial(jg_throttle)]
 fn test_merge_v_custom_id(protocol: IoProtocol) {
     if protocol == IoProtocol::GraphSONV2 {
         //GraphSONV2 doesn't support the non-string key of the merge step,
@@ -192,6 +196,7 @@ fn test_merge_v_custom_id(protocol: IoProtocol) {
 }
 
 #[apply(common::serializers)]
+#[serial(jg_throttle)]
 fn test_add_v_custom_id(protocol: IoProtocol) {
     let client = expect_janusgraph_client(protocol);
     let expected_id = create_novel_vertex_id();
