@@ -47,8 +47,8 @@ fn test_mapping_custom_vertex_id(protocol: IoProtocol) {
         .property("date", 1551825863 as i64)
         .value_map(true)
         .by(TraversalBuilder::new(Bytecode::new()).unfold())
-        .next();
-    assert_eq!(mark.is_ok(), true);
+        .next()
+        .expect("Should get a response");
 
     #[derive(Debug, PartialEq, FromGMap)]
     struct Person {
