@@ -4,17 +4,90 @@ use common::io::{drop_vertices, expect_janusgraph_client};
 use gremlin_client::{
     process::traversal::{traversal, __},
     structure::T,
-    GKey, GValue,
+    GKey, GValue, IoProtocol,
 };
+
+use rstest::*;
+use rstest_reuse::apply;
+use serial_test::serial;
 
 mod common;
 
 //Custom vertex ids are a feature offered by JanusGraph
 //https://docs.janusgraph.org/advanced-topics/custom-vertex-id/
 
-#[test]
-fn test_merge_v_custom_id() {
-    let client = expect_janusgraph_client();
+#[apply(common::serializers)]
+#[serial(test_mapping_custom_vertex_id)]
+#[cfg(feature = "derive")]
+fn test_mapping_custom_vertex_id(protocol: IoProtocol) {
+    if protocol == IoProtocol::GraphSONV2 {
+        //GraphSONV2 doesn't support the non-string key of the merge step,
+        //so skip it in testing
+        return;
+    }
+    let client = expect_janusgraph_client(protocol);
+    use chrono::{DateTime, TimeZone, Utc};
+    use gremlin_client::derive::FromGMap;
+    use gremlin_client::process::traversal::{Bytecode, TraversalBuilder};
+    use std::convert::TryFrom;
+
+    drop_vertices(&client, "test_mapping_custom_vertex_id").unwrap();
+
+    let g = traversal().with_remote(client);
+
+    let uuid = uuid::Uuid::new_v4();
+    let mark = g
+        .add_v("test_mapping_custom_vertex_id")
+        .property(T::Id, "test_mapping_custom_id")
+        .property("name", "Mark")
+        .property("age", 22)
+        .property("time", 22 as i64)
+        .property("score", 3.2)
+        .property("uuid", uuid.clone())
+        .property("datetime", chrono::Utc.timestamp(1551825863, 0))
+        .property("date", 1551825863 as i64)
+        .value_map(true)
+        .by(TraversalBuilder::new(Bytecode::new()).unfold())
+        .next();
+    assert_eq!(mark.is_ok(), true);
+
+    #[derive(Debug, PartialEq, FromGMap)]
+    struct Person {
+        id: String,
+        label: String,
+        name: String,
+        age: i32,
+        time: i64,
+        datetime: DateTime<Utc>,
+        uuid: uuid::Uuid,
+        optional: Option<String>,
+    }
+    let person = Person::try_from(mark.unwrap().unwrap()).expect("Should get person");
+
+    assert_eq!(
+        Person {
+            id: String::from("test_mapping_custom_id"),
+            label: String::from("test_mapping_custom_vertex_id"),
+            name: String::from("Mark"),
+            age: 22,
+            time: 22,
+            datetime: chrono::Utc.timestamp(1551825863, 0),
+            uuid: uuid,
+            optional: None
+        },
+        person
+    );
+}
+
+#[apply(common::serializers)]
+#[serial(test_merge_v_custom_id)]
+fn test_merge_v_custom_id(protocol: IoProtocol) {
+    if protocol == IoProtocol::GraphSONV2 {
+        //GraphSONV2 doesn't support the non-string key of the merge step,
+        //so skip it in testing
+        return;
+    }
+    let client = expect_janusgraph_client(protocol);
     let expected_label = "test_merge_v_custom_id";
     drop_vertices(&client, expected_label).expect("Failed to drop vertices");
     let g = traversal().with_remote(client);
@@ -75,9 +148,10 @@ fn test_merge_v_custom_id() {
     assert_eq!(expected_property, actual_property);
 }
 
-#[test]
-fn test_add_v_custom_id() {
-    let client = expect_janusgraph_client();
+#[apply(common::serializers)]
+#[serial(test_merge_v_custom_id)]
+fn test_add_v_custom_id(protocol: IoProtocol) {
+    let client = expect_janusgraph_client(protocol);
     let expected_id = "test_add_v_custom_id";
     let test_vertex_label = "test_add_v_custom_id";
     drop_vertices(&client, test_vertex_label).expect("Failed to drop vertices");

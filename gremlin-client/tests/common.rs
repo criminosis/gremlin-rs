@@ -29,8 +29,15 @@ pub mod io {
         GremlinClient::connect(("localhost", 8182))
     }
 
-    fn connect_janusgraph_client() -> GremlinResult<GremlinClient> {
-        GremlinClient::connect(("localhost", 8184))
+    fn connect_janusgraph_client(serializer: IoProtocol) -> GremlinResult<GremlinClient> {
+        GremlinClient::connect(
+            ConnectionOptions::builder()
+                .host("localhost")
+                .port(8184)
+                .serializer(serializer.clone())
+                .deserializer(serializer)
+                .build(),
+        )
     }
 
     pub fn connect_serializer(serializer: IoProtocol) -> GremlinResult<GremlinClient> {
@@ -53,8 +60,8 @@ pub mod io {
         connect().expect("It should connect")
     }
 
-    pub fn expect_janusgraph_client() -> GremlinClient {
-        connect_janusgraph_client().expect("It should connect")
+    pub fn expect_janusgraph_client(serializer: IoProtocol) -> GremlinClient {
+        connect_janusgraph_client(serializer).expect("It should connect")
     }
 
     pub fn expect_client_serializer(serializer: IoProtocol) -> GremlinClient {

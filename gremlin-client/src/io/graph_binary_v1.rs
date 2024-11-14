@@ -59,6 +59,7 @@ const MERTRICS: u8 = 0x2C;
 const TRAVERSAL_MERTRICS: u8 = 0x2D;
 const MERGE: u8 = 0x2E;
 const UNSPECIFIED_NULL_OBEJECT: u8 = 0xFE;
+const CUSTOM: u8 = 0x00;
 
 pub(crate) struct RequestMessage<'a, 'b> {
     pub(crate) request_id: Uuid,
@@ -714,10 +715,113 @@ impl GraphBinaryV1Deser for GValue {
                     ))),
                 }
             }
+            CUSTOM => {
+                let custom_name = String::from_be_bytes(bytes)?;
+                match custom_name.as_str() {
+                    "janusgraph.RelationIdentifier" => {
+                        let deserialized: Option<JanusGraphRelationIdentifier> =
+                            GraphBinaryV1Deser::from_be_bytes(bytes)?;
+                        Ok(deserialized
+                            .map(|value| {
+                                //We don't have a GValue for JG types, and moreover supporting future custom types we may not want to
+                                //so for now just mapping it to a GValue::String
+                                let mut converted = format!(
+                                    "{}-{}-{}",
+                                    value.relation_id, value.out_vertex_id, value.type_id
+                                );
+                                if let Some(in_vertex_id) = value.in_vertex_id {
+                                    converted.push('-');
+                                    converted.push_str(&in_vertex_id);
+                                }
+                                GValue::String(converted)
+                            })
+                            .unwrap_or(GValue::Null))
+                    }
+                    other => unimplemented!("Unimplemented handling of custom type {other}"),
+                }
+            }
             other => {
-                unimplemented!("Unimplemented deserialization byte {other}");
+                let remainder: Vec<u8> = bytes.cloned().collect();
+                unimplemented!("Unimplemented deserialization byte {other}. {remainder:?}");
             }
         }
+    }
+}
+
+#[derive(Debug)]
+struct JanusGraphRelationIdentifier {
+    out_vertex_id: String,
+    type_id: i64,
+    relation_id: i64,
+    in_vertex_id: Option<String>,
+}
+
+impl GraphBinaryV1Deser for Option<JanusGraphRelationIdentifier> {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        //Confirm the marker bytes that should be next
+        //0x1001
+        let marker_bytes: i32 = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+        if marker_bytes != 0x1001 {
+            return Err(GremlinError::Cast(format!(
+                "Unexpected marker bytes for JanusGraphRelationIdentifier"
+            )));
+        }
+
+        match bytes.next() {
+            Some(0x00) => {
+                //nothing to do
+            }
+            Some(0x01) => return Ok(None),
+            _ => return Err(GremlinError::Cast(format!("Invalid null value byte"))),
+        }
+
+        fn read_string<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<String> {
+            let mut string = String::new();
+            //JG custom string serialization uses the high portion of a byte to indicate the terminus of the string
+            //so we'll need to mask out the value from the low half of the byte and then check the high portion
+            //for termination
+            loop {
+                let Some(byte) = bytes.next() else {
+                    return Err(GremlinError::Cast(format!(
+                        "Exhausted bytes before terminal string marker"
+                    )));
+                };
+                string.push((byte & 0x7F) as char);
+
+                if byte & 0x80 > 0 {
+                    break;
+                }
+            }
+            Ok(string)
+        }
+
+        fn read_vertex_id<'a, S: Iterator<Item = &'a u8>>(
+            bytes: &mut S,
+        ) -> GremlinResult<Option<String>> {
+            //There should be a type marker of either Long(0) or String(1)
+            //reuse bool here, mapping false to a Long and true to String
+            if bool::from_be_bytes(bytes)? {
+                Ok(Some(read_string(bytes)?))
+            } else {
+                let value = <i64 as GraphBinaryV1Deser>::from_be_bytes(bytes)?;
+                if value == 0 {
+                    Ok(None)
+                } else {
+                    Ok(Some(value.to_string()))
+                }
+            }
+        }
+
+        let out_vertex_id = read_vertex_id(bytes)?.expect("Out vertex id should never be null");
+        let type_id: i64 = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+        let relation_id: i64 = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+        let in_vertex_id = read_vertex_id(bytes)?;
+        Ok(Some(JanusGraphRelationIdentifier {
+            out_vertex_id,
+            type_id,
+            relation_id,
+            in_vertex_id,
+        }))
     }
 }
 
@@ -900,8 +1004,7 @@ impl GraphBinaryV1Deser for VertexProperty {
         consume_expected_null_reference_bytes(bytes, "Parent vertex")?;
 
         //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains properties.
-        //Note that as TinkerPop currently send "references" only, this value will always be null.
-        consume_expected_null_reference_bytes(bytes, "Properties")?;
+        let _ = GValue::from_be_bytes(bytes)?; //we don't have a place for this?
         Ok(VertexProperty::new(id, label, value))
     }
 }
@@ -914,58 +1017,18 @@ impl GraphBinaryV1Deser for Vertex {
         //{label} is a String value.
         let label: String = GraphBinaryV1Deser::from_be_bytes(bytes)?;
         //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains properties.
-        //Note that as TinkerPop currently send "references" only, this value will always be null.
         //properties: HashMap<String, Vec<VertexProperty>>,
         let properties: GValue = GraphBinaryV1Deser::from_be_bytes(bytes)?;
         match properties {
-            //Should always be null
             GValue::Null => Ok(Vertex::new(id.try_into()?, label, HashMap::new())),
-            // GValue::Map(map) => {
-            //     let properties = map
-            //         .into_iter()
-            //         .map(|(k, v)| {
-            //             let key = match k {
-            //                 GKey::T(t) => match t {
-            //                     T::Id => "id".to_owned(),
-            //                     T::Key => "key".to_owned(),
-            //                     T::Label => "label".to_owned(),
-            //                     T::Value => "value".to_owned(),
-            //                 },
-            //                 GKey::String(s) => s,
-            //                 GKey::Int64(i) => i.to_string(),
-            //                 GKey::Int32(i) => i.to_string(),
-            //                 _ => {
-            //                     return Err(GremlinError::Cast(format!(
-            //                         "Unsupported vertex property key type"
-            //                     )))
-            //                 }
-            //             };
-
-            //             fn unfurl_gvalue_to_vertex_property(
-            //                 v: GValue,
-            //             ) -> Result<Vec<VertexProperty>, GremlinError> {
-            //                 match v {
-            //                     GValue::VertexProperty(vertex_property) => {
-            //                         Ok(vec![vertex_property])
-            //                     }
-            //                     GValue::List(list) => Ok(list
-            //                         .into_iter()
-            //                         .map(|value| unfurl_gvalue_to_vertex_property(value))
-            //                         .collect::<Result<Vec<Vec<VertexProperty>>, GremlinError>>()?
-            //                         .into_iter()
-            //                         .flat_map(|vec| vec.into_iter())
-            //                         .collect()),
-            //                     _ => Err(GremlinError::Cast(format!(
-            //                         "Unsupported vertex property value type"
-            //                     ))),
-            //                 }
-            //             }
-
-            //             Ok((key, unfurl_gvalue_to_vertex_property(v)?))
-            //         })
-            //         .collect::<Result<HashMap<String, Vec<VertexProperty>>, GremlinError>>()?;
-            //     Ok(Vertex::new(id.try_into()?, label, properties))
-            // }
+            GValue::List(list) => {
+                let mut properties = HashMap::new();
+                for element in list.into_iter() {
+                    let vp: VertexProperty = element.take()?;
+                    properties.insert(vp.label().clone(), vec![vp]);
+                }
+                Ok(Vertex::new(id.try_into()?, label, properties))
+            }
             other => Err(GremlinError::Cast(format!(
                 "Unsupported vertex property type: {other:?}"
             ))),
