@@ -9,7 +9,7 @@ use crate::{
     message::{ReponseStatus, Response, ResponseResult},
     process::traversal::{Instruction, Order, Scope},
     structure::{Column, Direction, Merge, Pop, TextP, Traverser, T},
-    Cardinality, Edge, GKey, GValue, GremlinError, GremlinResult, Metric, Path, ToGValue,
+    Cardinality, Edge, GKey, GValue, GremlinError, GremlinResult, Metric, Path, Property, ToGValue,
     TraversalMetrics, Vertex, VertexProperty, GID,
 };
 
@@ -34,7 +34,7 @@ const SET: u8 = 0x0B;
 const UUID: u8 = 0x0C;
 const EDGE: u8 = 0x0D;
 const PATH: u8 = 0x0E;
-// const PROPERTY: u8 = 0x0F;
+const PROPERTY: u8 = 0x0F;
 // const TINKERGRAPH: u8 = 0x10;
 const VERTEX: u8 = 0x11;
 const VERTEX_PROPERTY: u8 = 0x12;
@@ -671,6 +671,10 @@ impl GraphBinaryV1Deser for GValue {
                 Some(value) => GValue::Path(value),
                 None => GValue::Null,
             }),
+            PROPERTY => Ok(match Property::from_be_bytes_nullable(bytes)? {
+                Some(value) => GValue::Property(value),
+                None => GValue::Null,
+            }),
             VERTEX => Ok(match Vertex::from_be_bytes_nullable(bytes)? {
                 Some(value) => GValue::Vertex(value),
                 None => GValue::Null,
@@ -963,8 +967,23 @@ impl GraphBinaryV1Deser for Edge {
         //{parent} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains the parent Vertex. Note that as TinkerPop currently send "references" only, this value will always be null.
         consume_expected_null_reference_bytes(bytes, "Parent")?;
 
-        //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains the properties for the edge. Note that as TinkerPop currently send "references" only this value will always be null.
-        consume_expected_null_reference_bytes(bytes, "Properties")?;
+        //{properties} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which contains the properties for the edge.
+        let properties = match GValue::from_be_bytes(bytes)? {
+            GValue::Null => HashMap::new(),
+            GValue::List(raw_properties) => raw_properties
+                .into_iter()
+                .map(|property| {
+                    property
+                        .take::<Property>()
+                        .map(|converted| (converted.label().clone(), converted))
+                })
+                .collect::<GremlinResult<_>>()?,
+            _ => {
+                return Err(GremlinError::Cast(format!(
+                    "Edge properties should either be Null or List"
+                )))
+            }
+        };
         Ok(Edge::new(
             id.try_into()?,
             label,
@@ -972,8 +991,25 @@ impl GraphBinaryV1Deser for Edge {
             in_v_label,
             out_v_id.try_into()?,
             out_v_label,
-            HashMap::new(),
+            properties,
         ))
+    }
+}
+
+impl GraphBinaryV1Deser for Property {
+    fn from_be_bytes<'a, S: Iterator<Item = &'a u8>>(bytes: &mut S) -> GremlinResult<Self> {
+        //Format: {key}{value}{parent}
+
+        //{key} is a String value
+        let key: String = GraphBinaryV1Deser::from_be_bytes(bytes)?;
+
+        //{value} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value}
+        let value = GValue::from_be_bytes(bytes)?;
+
+        //{parent} is a fully qualified typed value composed of {type_code}{type_info}{value_flag}{value} which is either an Edge or VertexProperty.
+        //Note that as TinkerPop currently sends "references" only this value will always be null.
+        consume_expected_null_reference_bytes(bytes, "Parent")?;
+        Ok(Property::new(key, value))
     }
 }
 
